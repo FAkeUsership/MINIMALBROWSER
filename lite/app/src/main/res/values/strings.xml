@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Minimal Lite</string>
+
+    <!-- rail -->
+    <string name="rail_home">Home</string>
+    <string name="rail_web">Web</string>
+    <string name="rail_tabs">Tabs</string>
+    <string name="rail_settings">Settings</string>
+
+    <!-- top bar -->
+    <string name="crumb_browser">minimal browser</string>
+    <string name="shields_on">Shields on</string>
+    <string name="shields_off">Shields off</string>
+
+    <!-- home -->
+    <string name="home_search_hint">Search or type a URL</string>
+    <string name="home_continue">Continue reading</string>
+    <string name="home_foot_suffix">your data stays on this device</string>
+
+    <string name="home_empty_recent">Nothing here yet — pages you open show up here.</string>
+
+    <!-- web -->
+    <string name="web_back_hint">double-tap = show buttons</string>
+    <string name="web_back_label">◀ back</string>
+
+
+    <!-- toasts (ported from the HTML script) -->
+    <string name="t_fs_enter">Full screen — only the page. Press back twice for buttons.</string>
+    <string name="t_fs_exit">Chrome restored</string>
+    <string name="t_hold_hint">Keep holding to hide everything…</string>
+    <string name="t_controls_hidden">Controls hidden again</string>
+    <string name="t_buttons_shown">Buttons shown — hold Web 5s to restore full bar</string>
+    <string name="t_double_tap_hint">Double-tap back to show the buttons</string>
+    <string name="t_hidden_again">Hidden again</string>
+    <string name="t_hold_web_hint">Hold the Web icon (left rail) for 5 seconds</string>
+    <string name="t_tab_closed">Tab closed</string>
+    <string name="t_new_tab">New tab opened</string>
+    <string name="t_searching_fmt">Searching \u201C%1$s\u201D …</string>
+    <string name="t_opening_fmt">Opening %1$s …</string>
+
+    <!-- settings -->
+    <string name="set_appearance">Appearance</string>
+    <string name="set_privacy">Privacy &amp; Shields</string>
+    <string name="set_search">Search engine</string>
+    <string name="set_homepage">Homepage</string>
+    <string name="set_downloads">Downloads</string>
+    <string name="set_sync">Sync &amp; backup</string>
+    <string name="set_about">About</string>
+
+    <!-- content descriptions -->
+    <string name="cd_back">Back</string>
+    <string name="cd_forward">Forward</string>
+    <string name="cd_reload">Reload</string>
+    <string name="cd_menu">Menu</string>
+    <string name="cd_close">Close</string>
+    <string name="cd_tabs">Tabs</string>
+    <string name="cd_shield">Shields</string>
+    <plurals name="blocked_fmt">
+        <item quantity="one">%1$d ad &amp; %2$d trackers blocked on this page</item>
+        <item quantity="other">%1$d ads &amp; %2$d trackers blocked on this page</item>
+    </plurals>
+    <plurals name="blocked_today_fmt">
+        <item quantity="one">%1$d ad blocked today · your data stays on this device</item>
+        <item quantity="other">%1$d ads blocked today · your data stays on this device</item>
+    </plurals>
+</resources>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Minimal" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/shell</item>
+        <item name="android:colorBackground">@color/shell</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="colorPrimary">@color/shell</item>
+        <item name="colorPrimaryDark">@color/black</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="colorControlNormal">@color/muted</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="android:navigationBarColor">@color/black</item>
+        <item name="android:statusBarColor">@color/black</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+    <!-- Dialogs stay monochrome and readable instead of inheriting dark-on-dark -->
+    <style name="Theme.Minimal.Dialog" parent="Theme.AppCompat.Light.Dialog.Alert">
+        <item name="colorAccent">#000000</item>
+        <item name="android:textColorPrimary">#1A1A1A</item>
+        <item name="android:textColorSecondary">#5B5B5B</item>
+        <item name="android:windowBackground">@drawable/bg_dialog</item>
+        <item name="android:background">@color/white</item>
+    </style>
+</resources>
