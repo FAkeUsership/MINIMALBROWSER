@@ -1,1 +1,67 @@
-cGFja2FnZSBjb20ubWluaW1hbC5icm93c2VyCgppbXBvcnQgYW5kcm9pZC5jb250ZW50LkNvbnRleHQKaW1wb3J0IGFuZHJvaWQudXRpbC5Mb2cKaW1wb3J0IGFuZHJvaWQud2lkZ2V0LlRvYXN0CmltcG9ydCBqYXZhLmlvLkZpbGUKaW1wb3J0IGphdmEudGV4dC5TaW1wbGVEYXRlRm9ybWF0CmltcG9ydCBqYXZhLnV0aWwuRGF0ZQppbXBvcnQgamF2YS51dGlsLkxvY2FsZQoKLyoqCiAqIFJlY29yZHMgdW5jYXVnaHQgZXhjZXB0aW9ucyB0byBgZmlsZXNEaXIvY3Jhc2gudHh0YCBhbmQgc2hvd3MgdGhlIGZpcnN0IGxpbmUgYXMgYQogKiB0b2FzdCwgc28gYSBjcmFzaCBvbiBhIGRldmljZSB3aXRoIG5vIGNhYmxlIGF0dGFjaGVkIGlzIHN0aWxsIHJlYWRhYmxlLgogKgogKiBUaGUgZnVsbCB0cmFjZSBpcyBrZXB0IGluIHRoZSBmaWxlOiBTZXR0aW5ncyDihpIgQWJvdXQg4oaSICJTaGFyZSByZWNlbnQgY3Jhc2ggbG9nIiwKICogb3IgYGFkYiBwdWxsIC9kYXRhL2RhdGEvY29tLm1pbmltYWwuYnJvd3Nlci9maWxlcy9jcmFzaC50eHRgLgogKi8Kb2JqZWN0IENyYXNoUmVwb3J0ZXIgewoKICAgIHByaXZhdGUgY29uc3QgdmFsIFRBRyA9ICJNaW5pbWFsQ3Jhc2giCiAgICBwcml2YXRlIGNvbnN0IHZhbCBGSUxFID0gImNyYXNoLnR4dCIKICAgIHByaXZhdGUgY29uc3QgdmFsIE1BWF9SRUNPUkRTID0gNQogICAgcHJpdmF0ZSB2YXIgYXBwQ29udGV4dDogQ29udGV4dD8gPSBudWxsCgogICAgZnVuIGluc3RhbGwoY29udGV4dDogQ29udGV4dCkgewogICAgICAgIGFwcENvbnRleHQgPSBjb250ZXh0LmFwcGxpY2F0aW9uQ29udGV4dAogICAgICAgIHZhbCBwcmV2aW91cyA9IFRocmVhZC5nZXREZWZhdWx0VW5jYXVnaHRFeGNlcHRpb25IYW5kbGVyKCkKICAgICAgICBUaHJlYWQuc2V0RGVmYXVsdFVuY2F1Z2h0RXhjZXB0aW9uSGFuZGxlciB7IHRocmVhZCwgZXJyb3IgLT4KICAgICAgICAgICAgdHJ5IHsKICAgICAgICAgICAgICAgIHJlY29yZCh0aHJlYWQsIGVycm9yKQogICAgICAgICAgICB9IGNhdGNoIChfOiBUaHJvd2FibGUpIHsKICAgICAgICAgICAgICAgIC8qIG5ldmVyIGxldCByZXBvcnRpbmcgdHVybiBhIGNyYXNoIGludG8gYSBoYW5nICovCiAgICAgICAgICAgIH0KICAgICAgICAgICAgcHJldmlvdXM/LnVuY2F1Z2h0RXhjZXB0aW9uKHRocmVhZCwgZXJyb3IpCiAgICAgICAgfQogICAgfQoKICAgIHByaXZhdGUgZnVuIHJlY29yZCh0aHJlYWQ6IFRocmVhZCwgZXJyb3I6IFRocm93YWJsZSkgewogICAgICAgIHZhbCBzdGFtcCA9IFNpbXBsZURhdGVGb3JtYXQoInl5eXktTU0tZGQgSEg6bW06c3MuU1NTIiwgTG9jYWxlLlVTKS5mb3JtYXQoRGF0ZSgpKQogICAgICAgIHZhbCB0cmFjZSA9IExvZy5nZXRTdGFja1RyYWNlU3RyaW5nKGVycm9yKQogICAgICAgIExvZy5lKFRBRywgInVuY2F1Z2h0IG9uICR7dGhyZWFkLm5hbWV9IiwgZXJyb3IpCgogICAgICAgIHZhbCBjdHggPSBhcHBDb250ZXh0ID86IHJldHVybgogICAgICAgIHZhbCBmaWxlID0gRmlsZShjdHguZmlsZXNEaXIsIEZJTEUpCiAgICAgICAgdmFsIGhlYWRlciA9ICI9PT0gJHN0YW1wICAke2Vycm9yLmphdmFDbGFzcy5uYW1lfTogJHtlcnJvci5tZXNzYWdlfSA9PT0iCiAgICAgICAgdmFsIGJvZHkgPSBmaWxlLnRha2VJZiB7IGl0LmV4aXN0cygpIH0/LnJlYWRUZXh0KCkub3JFbXB0eSgpCiAgICAgICAgdmFsIG1lcmdlZCA9IChsaXN0T2YoIiRoZWFkZXJcbiR0cmFjZSIpICsgYm9keS5zcGxpdCgiXG49PT0gIikudGFrZShNQVhfUkVDT1JEUyAtIDEpKQogICAgICAgICAgICAuam9pblRvU3RyaW5nKCJcbj09PSAiKS5yZW1vdmVQcmVmaXgoIj09PSAiKS5sZXQgeyAiPT09ICRpdCIgfQogICAgICAgIHJ1bkNhdGNoaW5nIHsgZmlsZS53cml0ZVRleHQobWVyZ2VkLnRha2UoNjQgKiAxMDI0KSkgfQoKICAgICAgICAvLyBTdXJmYWNlIGl0OiBhIHNpbGVudCBjcmFzaCBvbiBhIHBob25lIHdpdGggbm8gYWRiIGlzIHVzZWxlc3MgdG8gZGVidWcuCiAgICAgICAgdmFsIHNob3J0ID0gIiR7ZXJyb3IuamF2YUNsYXNzLnNpbXBsZU5hbWV9OiAke2Vycm9yLm1lc3NhZ2UgPzogIm5vIG1lc3NhZ2UifSIKICAgICAgICBhbmRyb2lkLm9zLkhhbmRsZXIoYW5kcm9pZC5vcy5Mb29wZXIuZ2V0TWFpbkxvb3BlcigpKS5wb3N0IHsKICAgICAgICAgICAgcnVuQ2F0Y2hpbmcgewogICAgICAgICAgICAgICAgVG9hc3QubWFrZVRleHQoY3R4LCAiQ3Jhc2ggY2FwdHVyZWQg4oCUIHNlZSBjcmFzaC50eHRcbiRzaG9ydCIsIFRvYXN0LkxFTkdUSF9MT05HKS5zaG93KCkKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KCiAgICAvKiogTW9zdCByZWNlbnQgcmVjb3JkZWQgdHJhY2UsIG9yIG51bGwuIFVzZWQgYnkgdGhlIFNldHRpbmdzIHNjcmVlbi4gKi8KICAgIGZ1biByZWFkTGF0ZXN0KGNvbnRleHQ6IENvbnRleHQpOiBTdHJpbmc/ID0KICAgICAgICBydW5DYXRjaGluZyB7IEZpbGUoY29udGV4dC5maWxlc0RpciwgRklMRSkudGFrZUlmIHsgaXQuZXhpc3RzKCkgfT8ucmVhZFRleHQoKSB9LmdldE9yTnVsbCgpCgogICAgZnVuIGNsZWFyKGNvbnRleHQ6IENvbnRleHQpIHsKICAgICAgICBydW5DYXRjaGluZyB7IEZpbGUoY29udGV4dC5maWxlc0RpciwgRklMRSkuZGVsZXRlKCkgfQogICAgfQp9Cg==
+package com.minimal.browser
+
+import android.content.Context
+import android.util.Log
+import android.widget.Toast
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * Records uncaught exceptions to `filesDir/crash.txt` and shows the first line as a
+ * toast, so a crash on a device with no cable attached is still readable.
+ *
+ * The full trace is kept in the file: Settings → About → "Share recent crash log",
+ * or `adb pull /data/data/com.minimal.browser/files/crash.txt`.
+ */
+object CrashReporter {
+
+    private const val TAG = "MinimalCrash"
+    private const val FILE = "crash.txt"
+    private const val MAX_RECORDS = 5
+    private var appContext: Context? = null
+
+    fun install(context: Context) {
+        appContext = context.applicationContext
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            try {
+                record(thread, error)
+            } catch (_: Throwable) {
+                /* never let reporting turn a crash into a hang */
+            }
+            previous?.uncaughtException(thread, error)
+        }
+    }
+
+    private fun record(thread: Thread, error: Throwable) {
+        val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+        val trace = Log.getStackTraceString(error)
+        Log.e(TAG, "uncaught on ${thread.name}", error)
+
+        val ctx = appContext ?: return
+        val file = File(ctx.filesDir, FILE)
+        val header = "=== $stamp  ${error.javaClass.name}: ${error.message} ==="
+        val body = file.takeIf { it.exists() }?.readText().orEmpty()
+        val merged = (listOf("$header\n$trace") + body.split("\n=== ").take(MAX_RECORDS - 1))
+            .joinToString("\n=== ").removePrefix("=== ").let { "=== $it" }
+        runCatching { file.writeText(merged.take(64 * 1024)) }
+
+        // Surface it: a silent crash on a phone with no adb is useless to debug.
+        val short = "${error.javaClass.simpleName}: ${error.message ?: "no message"}"
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            runCatching {
+                Toast.makeText(ctx, "Crash captured — see crash.txt\n$short", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** Most recent recorded trace, or null. Used by the Settings screen. */
+    fun readLatest(context: Context): String? =
+        runCatching { File(context.filesDir, FILE).takeIf { it.exists() }?.readText() }.getOrNull()
+
+    fun clear(context: Context) {
+        runCatching { File(context.filesDir, FILE).delete() }
+    }
+}
