@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.5 — Real browser menu, downloads, and new-tab polish
+
+- Fixes the actual three-dot menu defect: the full-screen drawer container was translated 330dp off-screen instead of just its panel. That left only a thin semi-black strip on the right, making the already-wired menu actions appear missing. The drawer now visibly opens as a right-side panel with its tap-to-close scrim.
+- Makes the visible menu practical: it exposes working New tab, **New private (incognito) tab**, Tabs, History, Bookmark, Downloads, Find in page, shields, theme, share, print, and Settings actions. Private-tab status is also visible in browser chrome and on a blank private tab.
+- Rebuilds download handling around a visible `Download file?` confirmation showing filename, MIME type, size when supplied, and source host. A confirmed transfer copies GeckoView's original authorized response stream—rather than re-requesting a possibly cookie/POST/signed URL—into Android's Downloads collection. An ordinary-tab transfer publishes and records a list item only after the copy succeeds, shows in-progress transfers in Downloads, and lets a completed item open in a matching Android app. Failed/cancelled transfers are closed/removed instead of becoming dummy history rows.
+- Adds safe `content://` sharing for completed Android 8/9 fallback downloads, and migrates the local download database so older, unverified placeholder rows are clearly not presented as openable files.
+- Adds **Settings → Appearance → Hide Android status bar**. It hides only the normal top Android status bar; it never changes the required five-second page-only gesture, which continues to hide both bars and exit with one Android Back/page double-tap.
+- Replaces the stark white blank Gecko document with a responsive native start surface until a real URL loads. The address bar now opens empty on a new tab instead of inserting its hint as text, and preserves the full editable URL rather than only a shortened chrome label. Home search/quick links no longer use fixed tablet-only widths.
+
 ## v1.2.4 — Signed non-debuggable release variant and chrome I/O pass
 
 - Publishes the first `assembleRelease` ARM64 APK: the installed process is non-debuggable and JNI-debugging is off. GitHub creates a standard Android debug certificate only in its disposable runner so the release variant remains sideloadable; its new per-run certificate may require uninstalling an older differently signed build. A persistent private release certificate is still needed for seamless update signing.

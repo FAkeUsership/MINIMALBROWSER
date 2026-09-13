@@ -7,9 +7,11 @@
 - A process-wide Gecko runtime created only when Web/navigation is first needed.
 - One deferred, initialized-default high-performance `SurfaceView`-backed visible `GeckoView`; Home, Tabs, Settings, and hidden screens never own a compositor surface.
 - Gecko delegates installed before each `GeckoSession` opens, URL-only ordinary-tab restoration, and replacement/reload of a crashed or killed renderer session.
-- Working Home quick links including Mail and YouTube, address-bar search/navigation, external URI routing, tab switching, history, downloads, printing, and private tabs. OAuth/`target=_blank` child windows are surfaced as foreground tabs, and JavaScript/FedCM/WebAuthn/redirect prompts are explicitly presented rather than silently dismissed.
+- A working three-dot side menu with New tab, **New private (incognito) tab**, Tabs, History, bookmarks, Downloads, Find in page, shields, theme, sharing, printing, and Settings. OAuth/`target=_blank` child windows are surfaced as foreground tabs, and JavaScript/FedCM/WebAuthn/redirect prompts are explicitly presented rather than silently dismissed.
+- Real download confirmation and handling: a Gecko-provided file stream is copied to Android Downloads, shown as an in-progress/complete entry, and a completed entry can be opened in a matching app. A download is listed only after it has actually been published; private-tab downloads are saved by Android but not retained in the browser list.
+- A responsive native start surface for an empty Web tab rather than a blank white Gecko page. The omnibox starts empty and preserves the full URL when edited.
 - A fixed **5-second** hold on the Web rail button for clean page-only mode. It hides app chrome and Android system bars; one Android Back gesture/button or a page double-tap restores them.
-- Normal Android system bars on all ordinary screens; predictive Back is enabled on current Android versions.
+- Normal Android system bars on ordinary screens by default; **Settings → Appearance → Hide Android status bar** optionally hides only the top system bar. Predictive Back is enabled on current Android versions.
 - An ARM64-only release APK that intentionally remains large because it includes `libxul.so` and Gecko companion libraries.
 
 ## Release and verification path
@@ -28,10 +30,13 @@ See [BUILD.md](BUILD.md) for the tag-based release procedure and [minimal-browse
 
 A successful GitHub workflow verifies source compilation, packaging, and release artifacts. It is not a substitute for live-device validation. On an Android 14+ ARM64 device, validate:
 
-1. Home → Mail and YouTube quick links;
-2. Web → address-bar URL and search navigation;
-3. a Google/Arena sign-in or consent flow, including any prompt and new foreground tab;
-4. tab creation, switching, closing, and Android Back;
-5. hold Web for exactly five seconds, then verify one Back and page double-tap restore;
-6. scrolling, navigation, tab switching, and device heat/stutter behavior on ordinary and tracker-heavy pages;
-7. download and print flows.
+1. Open the three-dot menu: verify its full right-side panel, New private tab, History, Bookmarks, Downloads, Find in page, and Settings actions;
+2. Home → Mail and YouTube quick links, plus the blank-tab start/search surface;
+3. Web → address-bar URL and search navigation;
+4. a Google/Arena sign-in or consent flow, including any prompt and new foreground tab;
+5. tab creation, switching, closing, private-tab indicator, and Android Back;
+6. a real download: approve its confirmation, verify it appears in Android Downloads and the app list, then open it from the app list;
+7. hold Web for exactly five seconds, then verify one Back and page double-tap restore;
+8. Settings → Appearance → Hide Android status bar, then restore it;
+9. scrolling, navigation, tab switching, and device heat/stutter behavior on ordinary and tracker-heavy pages;
+10. print flow.

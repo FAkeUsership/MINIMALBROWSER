@@ -129,7 +129,7 @@ class HomeScreen(context: Context) : ScrollView(context) {
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { leftMargin = context.dp(10) })
 
-        root.addView(search, LinearLayout.LayoutParams(context.dp(620), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        root.addView(search, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = context.dp(22)
         })
 
@@ -147,7 +147,7 @@ class HomeScreen(context: Context) : ScrollView(context) {
                 )
             })
         }
-        root.addView(grid, LinearLayout.LayoutParams(context.dp(760), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        root.addView(grid, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = context.dp(23)
         })
 
@@ -171,7 +171,7 @@ class HomeScreen(context: Context) : ScrollView(context) {
         recentWrap.addView(recentsBox)
         recentWrap.addView(emptyLabel)
 
-        root.addView(recentWrap, LinearLayout.LayoutParams(context.dp(760), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+        root.addView(recentWrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = context.dp(26)
         })
 

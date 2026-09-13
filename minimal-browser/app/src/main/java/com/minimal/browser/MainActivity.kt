@@ -38,7 +38,9 @@ import com.minimal.browser.ui.dp
 import com.minimal.browser.ui.icon
 import com.minimal.browser.ui.roundRect
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.WebResponse
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Minimal — a landscape, monochrome, privacy-first browser shell around
@@ -76,6 +78,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /* ---------------- state ---------------- */
     private var current = Screen.HOME
     private var previousScreen = Screen.HOME
+    private var visibleListMode: ListMode? = null
     /** App page-only mode, entered after holding Web for five seconds. */
     private var fullScreen = false
     /** A web page's own HTML/video full-screen request. */
@@ -98,6 +101,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private var drawerBookmarkUrl: String? = null
     private var drawerBookmarkValue = false
     private var drawerBookmarkRequest = 0L
+    private var lastDownloadsRefreshAt = 0L
 
     private enum class Screen { HOME, WEB, TABS, SETTINGS, LIST }
 
@@ -314,6 +318,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
         /* ---- lists ---- */
         listScreen.onOpenUrl = { openUrl(it) }
+        listScreen.onOpenDownload = { uri, mime -> openDownloadedFile(uri, mime) }
         listScreen.onDeleteBookmark = {
             invalidateDrawerBookmark()
             syncDrawer()
@@ -383,6 +388,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     private fun showList(mode: ListMode) {
+        visibleListMode = mode
         when (mode) {
             ListMode.HISTORY -> listScreen.showHistory()
             ListMode.BOOKMARKS -> listScreen.showBookmarks()
@@ -418,11 +424,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     /**
-     * Normal browser screens use normal Android system bars. Page-only mode
-     * starts with both bars hidden, but deliberately uses Android's DEFAULT
-     * inset behavior rather than sticky/transient immersive behavior. The
-     * default keeps a gesture-navigation Back gesture active while bars are
-     * hidden, so one Back reaches the AndroidX callback below instead of first
+     * Page-only mode always hides both Android bars. On ordinary screens the
+     * Appearance setting may hide only the top status bar while leaving the
+     * navigation/Back area available. DEFAULT behavior deliberately keeps a
+     * gesture-navigation Back gesture reaching this Activity rather than first
      * being consumed only to reveal a transient navigation bar.
      */
     private fun applySystemUi(pageOnly: Boolean = fullScreen || videoFullScreen) {
@@ -433,8 +438,13 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.hide(WindowInsetsCompat.Type.displayCutout())
         } else {
-            controller.show(WindowInsetsCompat.Type.systemBars())
+            controller.show(WindowInsetsCompat.Type.navigationBars())
             controller.show(WindowInsetsCompat.Type.displayCutout())
+            if (Prefs.hideStatusBar) {
+                controller.hide(WindowInsetsCompat.Type.statusBars())
+            } else {
+                controller.show(WindowInsetsCompat.Type.statusBars())
+            }
         }
     }
 
@@ -569,11 +579,13 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     private fun loadActiveSafely(url: String): Boolean = try {
         if (TabManager.loadInActive(url)) true else {
+            webScreen.cancelPendingNavigation()
             toast.say(getString(R.string.t_engine_session_failed))
             false
         }
     } catch (error: Throwable) {
         Log.e("MinimalBrowser", "Unable to load URL in bundled engine", error)
+        webScreen.cancelPendingNavigation()
         toast.say(getString(R.string.t_engine_session_failed))
         false
     }
@@ -744,8 +756,146 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         applyFullScreen()
     }
 
-    override fun onDownloadStarted(fileName: String) {
-        toast.say("Downloading $fileName")
+    override fun onDownloadRequested(tab: Tab, response: WebResponse) {
+        val request = Downloads.describe(response)
+        if (request == null) {
+            Downloads.discard(response)
+            toast.say("This download did not include a usable file")
+            return
+        }
+        if (isFinishing || isDestroyed) {
+            Downloads.discard(response)
+            return
+        }
+
+        // GeckoView owns this authorized stream. Avoid its short default read
+        // timeout while a person reads the confirmation, then close it on every
+        // cancel/dismiss path. This prevents a failed or invisible download from
+        // looking like a completed one in the browser UI.
+        runCatching { response.setReadTimeoutMillis(0) }
+        val consumed = AtomicBoolean(false)
+        fun discardResponse() {
+            if (consumed.compareAndSet(false, true)) Downloads.discard(response)
+        }
+        fun startTransfer() {
+            if (!consumed.compareAndSet(false, true)) return
+            Downloads.start(applicationContext, response, request, downloadListener(tab.private))
+        }
+
+        val source = UrlBar.hostOf(request.sourceUrl).ifBlank { request.sourceUrl }
+        val size = if (request.expectedBytes >= 0L) Fmt.bytes(request.expectedBytes) else "size unknown"
+        val message = buildString {
+            append(request.fileName)
+            append("\n")
+            append(request.mimeType)
+            append(" · ")
+            append(size)
+            append("\nFrom ")
+            append(source)
+            append("\n\nSaved to your device Downloads folder.")
+            if (request.requestExternalApp) append(" This file can be opened in a matching app after it is saved.")
+            if (tab.private) append(" Private-tab downloads are not kept in the browser download list.")
+        }
+        try {
+            val dialog = AlertDialog.Builder(this, R.style.Theme_Minimal_Dialog)
+                .setTitle("Download file?")
+                .setMessage(message)
+                .setNegativeButton("Cancel") { _, _ -> discardResponse() }
+                .setPositiveButton("Download") { _, _ -> startTransfer() }
+                .create()
+            dialog.setOnCancelListener { discardResponse() }
+            dialog.setOnDismissListener { discardResponse() }
+            dialog.show()
+        } catch (error: Throwable) {
+            Log.w("MinimalBrowser", "could not show download confirmation", error)
+            discardResponse()
+            toast.say("Could not show the download confirmation")
+        }
+    }
+
+    private fun downloadListener(privateDownload: Boolean): Downloads.Listener = object : Downloads.Listener {
+        override fun onStarted(request: Downloads.Request) {
+            toast.say("Downloading ${request.fileName}")
+            refreshDownloadsIfVisible(force = true)
+        }
+
+        override fun onProgress(request: Downloads.Request, receivedBytes: Long, expectedBytes: Long) {
+            // The transfer posts progress at most a few times per second. Avoid
+            // starting a database query for each byte callback, but make an open
+            // Downloads screen feel alive once per second.
+            refreshDownloadsIfVisible(force = false)
+        }
+
+        override fun onCompleted(download: Downloads.CompletedDownload) {
+            if (privateDownload) {
+                toast.say("Downloaded ${download.request.fileName}")
+                refreshDownloadsIfVisible(force = true)
+                return
+            }
+            // A history row is written only after MediaStore has published the
+            // fully copied file. The old code inserted it at transfer start,
+            // which produced dead, dummy download rows after any failure.
+            try {
+                chromeStore.execute {
+                    val saved = runCatching {
+                        DataStore.get(applicationContext).addDownload(
+                            fileName = download.request.fileName,
+                            url = download.request.sourceUrl,
+                            mime = download.request.mimeType,
+                            bytes = download.bytes,
+                            localUri = download.localUri.toString()
+                        )
+                    }.isSuccess
+                    runOnUiThread {
+                        if (!isDestroyed) {
+                            toast.say(
+                                if (saved) "Downloaded ${download.request.fileName}"
+                                else "File saved, but it could not be added to Downloads"
+                            )
+                            refreshDownloadsIfVisible(force = true)
+                        }
+                    }
+                }
+            } catch (error: Throwable) {
+                Log.w("MinimalBrowser", "could not record completed download", error)
+                if (!isDestroyed) toast.say("Downloaded ${download.request.fileName}")
+            }
+        }
+
+        override fun onFailed(request: Downloads.Request, reason: String) {
+            toast.say(reason)
+            refreshDownloadsIfVisible(force = true)
+        }
+    }
+
+    private fun refreshDownloadsIfVisible(force: Boolean) {
+        if (current != Screen.LIST || visibleListMode != ListMode.DOWNLOADS) return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastDownloadsRefreshAt < 1_000L) return
+        lastDownloadsRefreshAt = now
+        listScreen.showDownloads()
+    }
+
+    private fun openDownloadedFile(uriString: String, mime: String) {
+        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: run {
+            toast.say("This downloaded file is no longer available")
+            return
+        }
+        val type = mime.substringBefore(';').trim().ifBlank { "application/octet-stream" }
+        val view = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, type)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            if (view.resolveActivity(packageManager) == null) {
+                toast.say("No app can open this type of file")
+                return
+            }
+            startActivity(Intent.createChooser(view, "Open ${uri.lastPathSegment ?: "download"}"))
+        } catch (error: Throwable) {
+            Log.w("MinimalBrowser", "could not open downloaded file", error)
+            toast.say("Could not open this downloaded file")
+        }
     }
 
     override fun onTabWantsToClose(tab: Tab) {
@@ -919,6 +1069,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                 }
             }
             .show()
+    }
+
+    override fun onStatusBarVisibilityChanged() {
+        applySystemUi()
     }
 
     override fun onShowAbout() {

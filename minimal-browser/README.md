@@ -28,6 +28,8 @@ The Gradle configuration intentionally packages only `arm64-v8a`. The resulting 
 - `MainActivity` creates one `GeckoView` only after the Web screen becomes visible, retains GeckoView’s initialized default high-performance `SurfaceView`, and releases the session before hiding/removing the view. It does not redundantly reset that backend.
 - Automatic full-frame tab screenshots are intentionally avoided; tab cards use lightweight artwork so switching/loading does not force a GPU readback.
 - Shield events are coalesced into short UI/database batches on one low-priority worker; ordinary tab restore stores URLs/titles only. Private tabs are excluded.
+- The three-dot drawer is a real right-side menu (not a decorative strip), with normal/private tabs, library actions, Downloads, Find in page, privacy controls, sharing, printing, and Settings.
+- A download is confirmed before start, writes GeckoView's original authorized stream to Android Downloads, and becomes an openable library entry only after the completed file is published. Private-tab downloads are not retained in the app list.
 - `onCrash` and `onKill` replace only the affected session and reload its last URL.
 
 ## Page-only mode

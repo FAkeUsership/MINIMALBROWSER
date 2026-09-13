@@ -46,11 +46,13 @@ class WebScreen(context: Context) : LinearLayout(context) {
     val addressPill: LinearLayout
     val addressLabel: TextView
     val lockIcon: ImageView
+    private val privateChip: TextView
     val blockedChip: TextView
     private val webDivider: View
     val progressTrack: FrameLayout
     private val progressFill: View
     val container: FrameLayout
+    private val startPanel: BrowserStartPanel
     private var attachedGeckoView: GeckoView? = null
     val blockedBanner: TextView
 
@@ -59,6 +61,10 @@ class WebScreen(context: Context) : LinearLayout(context) {
     private val btnReload: ImageView
     private var editing = false
     private var pageOnly = false
+    private var blankTab = true
+    private var navigationPending = false
+    private var synchronizedTabId: String? = null
+    private var fullAddress = ""
 
     /**
      * Returning false from the touch listener below keeps ordinary web content
@@ -128,6 +134,20 @@ class WebScreen(context: Context) : LinearLayout(context) {
         }
         addressPill.addView(addressLabel, LayoutParams(0, LayoutParams.WRAP_CONTENT).apply { weight = 1f })
 
+        privateChip = TextView(context).apply {
+            text = "PRIVATE"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            background = context.roundRect(6, 0xFF363636.toInt())
+            setPadding(context.dp(6), context.dp(3), context.dp(6), context.dp(3))
+            visibility = GONE
+        }
+        addressPill.addView(privateChip, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+            leftMargin = context.dp(8)
+        })
+
         blockedChip = TextView(context).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
             setTypeface(typeface, Typeface.BOLD)
@@ -169,6 +189,16 @@ class WebScreen(context: Context) : LinearLayout(context) {
         // The bundled GeckoView surface is attached here only after a real tab
         // and a visible Web screen exist. Home and Tabs never own a hidden
         // native compositor surface.
+        //
+        // Gecko's truly blank document is white. Keep a purposeful native start
+        // surface above it until the user opens a real URL, then leave every
+        // rendered web page entirely to GeckoView.
+        startPanel = BrowserStartPanel(context).apply {
+            onSearch = { beginEditing() }
+        }
+        container.addView(startPanel, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+        ))
 
         // .blocked — the floating "3 ads & 1 tracker blocked" pill
         blockedBanner = TextView(context).apply {
@@ -199,6 +229,7 @@ class WebScreen(context: Context) : LinearLayout(context) {
     private fun beginEditing() {
         if (editing) return
         editing = true
+        updateStartPanel()
         onAddressFocused?.invoke()
         val index = addressPill.indexOfChild(addressLabel)
         addressPill.removeView(addressLabel)
@@ -213,8 +244,11 @@ class WebScreen(context: Context) : LinearLayout(context) {
             setPadding(0, 0, 0, 0)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             imeOptions = EditorInfo.IME_ACTION_GO
-            hint = "Search or type a URL"
-            setText(addressLabel.text)
+            hint = ADDRESS_PLACEHOLDER
+            // The visible idle label is a hint, not text the person should have
+            // to erase. Keep the full URL separately too: the compact chrome
+            // label can be shortened without truncating what the person edits.
+            setText(fullAddress)
             setSelection(text?.length ?: 0)
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
@@ -235,7 +269,10 @@ class WebScreen(context: Context) : LinearLayout(context) {
         findEditText()?.let { addressPill.removeView(it) }
         addressPill.addView(addressLabel, index, LayoutParams(0, LayoutParams.WRAP_CONTENT).apply { weight = 1f })
         val trimmed = raw.trim()
-        addressLabel.text = trimmed.ifEmpty { "Search or type a URL" }
+        fullAddress = trimmed
+        addressLabel.text = trimmed.ifEmpty { ADDRESS_PLACEHOLDER }
+        navigationPending = trimmed.isNotEmpty()
+        if (trimmed.isEmpty()) updateStartPanel() else startPanel.visibility = GONE
         if (trimmed.isNotEmpty()) onSubmitAddress?.invoke(trimmed)
     }
 
@@ -247,6 +284,12 @@ class WebScreen(context: Context) : LinearLayout(context) {
         return null
     }
 
+    /** Restore a blank-tab start surface if navigation was rejected before Gecko started it. */
+    fun cancelPendingNavigation() {
+        navigationPending = false
+        updateStartPanel()
+    }
+
     /** Called when full screen ends so a stuck editor does not survive. */
     fun cancelEditing() {
         if (!editing) return
@@ -255,6 +298,7 @@ class WebScreen(context: Context) : LinearLayout(context) {
         val index = addressPill.indexOfChild(findEditText())
         findEditText()?.let { addressPill.removeView(it) }
         addressPill.addView(addressLabel, index, LayoutParams(0, LayoutParams.WRAP_CONTENT).apply { weight = 1f })
+        updateStartPanel()
     }
 
     /* ------------------------------------------------------------------ */
@@ -262,8 +306,21 @@ class WebScreen(context: Context) : LinearLayout(context) {
     /* ------------------------------------------------------------------ */
 
     fun syncTo(tab: Tab?) {
+        if (synchronizedTabId != tab?.id) {
+            // A pending load belongs only to the tab that initiated it. Never
+            // hide the start surface when the person switches to a new blank tab.
+            synchronizedTabId = tab?.id
+            navigationPending = false
+        }
+        val documentIsBlank = tab == null || tab.url.isBlank() || tab.url.equals("about:blank", ignoreCase = true)
+        if (!documentIsBlank) navigationPending = false
+        blankTab = documentIsBlank && !navigationPending
+        if (!editing && !navigationPending) fullAddress = if (blankTab) "" else tab?.url.orEmpty()
+        startPanel.sync(tab?.private == true)
+        updateStartPanel()
         if (tab == null) {
-            addressLabel.text = "Search or type a URL"
+            addressLabel.text = ADDRESS_PLACEHOLDER
+            privateChip.visibility = GONE
             blockedChip.visibility = GONE
             blockedBanner.visibility = GONE
             lockIcon.icon(R.drawable.ic_search, 0xFF7A7A7A.toInt())
@@ -271,7 +328,8 @@ class WebScreen(context: Context) : LinearLayout(context) {
             btnForward.alpha = 0.35f
             return
         }
-        if (!editing) addressLabel.text = UrlBar.shortLabel(tab.url)
+        if (!editing) addressLabel.text = if (blankTab) ADDRESS_PLACEHOLDER else UrlBar.shortLabel(tab.url)
+        privateChip.visibility = if (tab.private) VISIBLE else GONE
         lockIcon.icon(
             if (tab.isSecure) R.drawable.ic_lock else R.drawable.ic_eyeoff,
             if (tab.isSecure) 0xFF7A7A7A.toInt() else 0xFF9C9C9C.toInt()
@@ -292,6 +350,10 @@ class WebScreen(context: Context) : LinearLayout(context) {
         // Gecko delegates can update while page-only mode is active. Never let
         // a shield badge become browser chrome over the clean page.
         blockedBanner.visibility = if (!pageOnly && tab.totalBlocked > 0) VISIBLE else GONE
+    }
+
+    private fun updateStartPanel() {
+        startPanel.visibility = if (!pageOnly && blankTab && !editing) VISIBLE else GONE
     }
 
     /**
@@ -373,6 +435,7 @@ class WebScreen(context: Context) : LinearLayout(context) {
             blockedBanner.visibility = GONE
             cancelEditing()
         }
+        updateStartPanel()
     }
 
     /** Places only the active bundled-engine GeckoView under browser overlays. */
@@ -420,6 +483,9 @@ class WebScreen(context: Context) : LinearLayout(context) {
         rightMargin = context.dp(8)
     }
 
+    private companion object {
+        const val ADDRESS_PLACEHOLDER = "Search or type a URL"
+    }
 }
 
 /** Small IME helper so the address bar behaves like a real one. */

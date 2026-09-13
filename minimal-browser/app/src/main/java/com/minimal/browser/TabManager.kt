@@ -74,7 +74,7 @@ object TabManager {
         fun onSecurityChanged(tab: Tab)
         fun onBlockedOnPage(tab: Tab)
         fun onEnterVideoFullScreen(fullScreen: Boolean)
-        fun onDownloadStarted(fileName: String)
+        fun onDownloadRequested(tab: Tab, response: WebResponse)
         fun onTabWantsToClose(tab: Tab)
         fun onSessionRecovered(tab: Tab)
         fun onSessionFailure(tab: Tab, reason: String)
@@ -676,19 +676,19 @@ object TabManager {
         }
 
         override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
-            if (!isCurrent(tab, session)) return
-            val context = host?.activeContext() ?: return
-            val name = Downloads.start(context, response) ?: return
-            if (!tab.private) {
-                val downloadUrl = response.uri.orEmpty()
-                val mime = response.headers["Content-Type"].orEmpty()
-                val bytes = response.headers["Content-Length"]?.toLongOrNull() ?: -1L
-                val storeContext = context.applicationContext
-                background {
-                    DataStore.get(storeContext).addDownload(name, downloadUrl, mime, bytes)
-                }
+            if (!isCurrent(tab, session)) {
+                Downloads.discard(response)
+                return
             }
-            host?.onDownloadStarted(name)
+            // GeckoView gives us the already-authorized byte stream. The host
+            // owns the visible confirmation and starts copying only if the
+            // person accepts; it also closes a declined response safely.
+            val browserHost = host
+            if (browserHost == null) {
+                Downloads.discard(response)
+            } else {
+                browserHost.onDownloadRequested(tab, response)
+            }
         }
 
         override fun onCrash(session: GeckoSession) {

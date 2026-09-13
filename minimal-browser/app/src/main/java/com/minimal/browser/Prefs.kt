@@ -25,6 +25,7 @@ object Prefs {
     private const val K_DESKTOP_UA = "desktop_ua"
     private const val K_FIRST_RUN = "first_run"
     private const val K_HOLD_HINT_SHOWN = "hold_hint_shown"
+    private const val K_HIDE_STATUS_BAR = "hide_status_bar"
 
     lateinit var sp: SharedPreferences
         private set
@@ -54,6 +55,11 @@ object Prefs {
     var bwTheme: Boolean
         get() = sp.getBoolean(K_BW_THEME, true)
         set(v) = sp.edit().putBoolean(K_BW_THEME, v).apply()
+
+    /** Hide only Android's top status bar on ordinary browser screens. */
+    var hideStatusBar: Boolean
+        get() = sp.getBoolean(K_HIDE_STATUS_BAR, false)
+        set(v) = sp.edit().putBoolean(K_HIDE_STATUS_BAR, v).apply()
 
     /** Page zoom default, 80..140 — matches the HTML range slider. */
     var textSizePercent: Int

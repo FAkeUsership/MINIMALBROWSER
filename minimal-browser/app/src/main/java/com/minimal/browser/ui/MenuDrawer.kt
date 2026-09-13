@@ -132,7 +132,10 @@ class MenuDrawer(context: Context) : FrameLayout(context) {
 
         buildMenu()
 
-        translationX = context.dp(330f)
+        // Only the panel starts off-screen. Translating this full-screen
+        // container would move the scrim as well and leave the actual menu
+        // beyond the right edge — the thin dark strip users were seeing.
+        panel.translationX = context.dp(330f)
     }
 
     /* ------------------------------------------------------------------ */

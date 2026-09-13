@@ -2,68 +2,214 @@ package com.minimal.browser
 
 import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import androidx.core.content.FileProvider
 import org.mozilla.geckoview.WebResponse
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.OutputStream
+import java.net.URLDecoder
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 /**
- * Download handling for bundled GeckoView responses.
+ * User-visible downloads for responses GeckoView cannot render.
  *
- * Gecko gives the browser an InputStream only for a response it declines to
- * render. The stream is copied off the UI thread into Android's public
- * Downloads collection on Android 10+ (or app external storage on older
- * releases) so a failed transfer cannot crash a tab or Activity.
+ * Gecko hands the browser the already-authorized response stream. Copying that
+ * stream preserves signed URLs, cookies, and POST-backed downloads that would
+ * fail if the app issued a second, unauthenticated DownloadManager request.
+ * Android 10+ output is owned MediaStore.Downloads content; older devices use
+ * app-external storage and share through FileProvider.
  */
 object Downloads {
 
     private const val TAG = "Downloads"
+    private const val PROGRESS_INTERVAL_MS = 400L
+    private const val BUFFER_SIZE = 64 * 1024
 
-    /** @return the visible filename once a destination was reserved. */
-    fun start(context: Context, response: WebResponse): String? {
-        val sourceUrl = response.uri ?: return null
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val executor = Executors.newFixedThreadPool(2) { work ->
+        Thread(work, "minimal-browser-download").apply {
+            priority = Thread.NORM_PRIORITY - 1
+        }
+    }
+    private val transfers = ConcurrentHashMap<String, Transfer>()
+
+    /** Immutable details presented before the user starts a download. */
+    data class Request(
+        val id: String = UUID.randomUUID().toString(),
+        val fileName: String,
+        val sourceUrl: String,
+        val mimeType: String,
+        val expectedBytes: Long,
+        val requestExternalApp: Boolean
+    )
+
+    /** Lightweight live state used by the Downloads screen while copying. */
+    data class ActiveDownload(
+        val id: String,
+        val fileName: String,
+        val sourceUrl: String,
+        val mimeType: String,
+        val receivedBytes: Long,
+        val expectedBytes: Long,
+        val startedAt: Long
+    )
+
+    /** Result emitted only after the byte stream is fully written and published. */
+    data class CompletedDownload(
+        val request: Request,
+        val localUri: Uri,
+        val bytes: Long
+    )
+
+    interface Listener {
+        fun onStarted(request: Request)
+        fun onProgress(request: Request, receivedBytes: Long, expectedBytes: Long)
+        fun onCompleted(download: CompletedDownload)
+        fun onFailed(request: Request, reason: String)
+    }
+
+    private class Transfer(val request: Request) {
+        val startedAt = System.currentTimeMillis()
+        @Volatile var receivedBytes: Long = 0
+    }
+
+    private data class Target(
+        val uri: Uri,
+        val output: OutputStream,
+        val legacyFile: File? = null
+    )
+
+    /** Read metadata without consuming the GeckoView response stream. */
+    fun describe(response: WebResponse): Request? {
+        val sourceUrl = response.uri?.trim().orEmpty()
+        if (sourceUrl.isEmpty()) return null
         val mime = response.headers["Content-Type"]
             ?.substringBefore(';')
             ?.trim()
             ?.ifBlank { null }
             ?: "application/octet-stream"
-        val name = fileNameFrom(sourceUrl, response.headers)
-        val body = response.body ?: return null
-        val target = createTarget(context, name, mime) ?: run {
-            // WebResponse explicitly requires callers to close ignored streams.
-            runCatching { body.close() }
-            return null
-        }
-
-        Thread({
-            try {
-                target.output.use { output ->
-                    BufferedInputStream(body, 64 * 1024).use { input ->
-                        input.copyTo(output, 64 * 1024)
-                    }
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) markComplete(context, target.uri)
-                Log.i(TAG, "saved $name")
-            } catch (error: Throwable) {
-                Log.w(TAG, "download failed for $sourceUrl", error)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) discardIncomplete(context, target.uri)
-                else target.file?.delete()
-            }
-        }, "minimal-browser-download").start()
-
-        return name
+        val bytes = response.headers["Content-Length"]?.trim()?.toLongOrNull()?.takeIf { it >= 0L } ?: -1L
+        return Request(
+            fileName = fileNameFrom(sourceUrl, response.headers),
+            sourceUrl = sourceUrl,
+            mimeType = mime,
+            expectedBytes = bytes,
+            requestExternalApp = response.requestExternalApp == true
+        )
     }
 
-    private data class Target(
-        val uri: android.net.Uri,
-        val output: OutputStream,
-        val file: File? = null
-    )
+    /** A response declined in the confirmation dialog must have its stream closed. */
+    fun discard(response: WebResponse) {
+        runCatching { response.body?.close() }
+            .onFailure { Log.w(TAG, "could not close cancelled download response", it) }
+    }
+
+    /** Snapshot for the in-app Downloads list. Completed items are stored separately. */
+    fun active(): List<ActiveDownload> = transfers.values
+        .map { transfer ->
+            val request = transfer.request
+            ActiveDownload(
+                id = request.id,
+                fileName = request.fileName,
+                sourceUrl = request.sourceUrl,
+                mimeType = request.mimeType,
+                receivedBytes = transfer.receivedBytes,
+                expectedBytes = request.expectedBytes,
+                startedAt = transfer.startedAt
+            )
+        }
+        .sortedByDescending { it.startedAt }
+
+    /**
+     * Start a previously confirmed response. Results are always delivered on
+     * Android's main thread so UI callers never mutate views from the copy task.
+     * @return false when the stream/destination cannot be reserved.
+     */
+    fun start(context: Context, response: WebResponse, request: Request, listener: Listener): Boolean {
+        val body = response.body ?: run {
+            dispatch { listener.onFailed(request, "The site did not provide a readable download stream") }
+            return false
+        }
+        // A person may take a moment to read the confirmation. GeckoView's
+        // normal read timeout is intentionally removed only for this stream;
+        // cancellation still closes it immediately.
+        runCatching { response.setReadTimeoutMillis(0) }
+        val appContext = context.applicationContext
+        val target = createTarget(appContext, request.fileName, request.mimeType) ?: run {
+            discard(response)
+            dispatch { listener.onFailed(request, "Could not create a file in Downloads") }
+            return false
+        }
+        val transfer = Transfer(request)
+        transfers[request.id] = transfer
+        dispatch { listener.onStarted(request) }
+
+        executor.execute {
+            try {
+                val copied = copyResponse(body, target.output, transfer, listener)
+                publishTarget(appContext, target)
+                val completed = CompletedDownload(
+                    request = request,
+                    localUri = visibleUri(appContext, target),
+                    bytes = copied
+                )
+                transfers.remove(request.id)
+                dispatch { listener.onCompleted(completed) }
+                Log.i(TAG, "saved ${request.fileName} ($copied bytes)")
+            } catch (error: Throwable) {
+                transfers.remove(request.id)
+                discardTarget(appContext, target)
+                Log.w(TAG, "download failed for ${request.sourceUrl}", error)
+                val detail = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+                dispatch { listener.onFailed(request, "Download failed: $detail") }
+            }
+        }
+        return true
+    }
+
+    private fun copyResponse(
+        body: java.io.InputStream,
+        output: OutputStream,
+        transfer: Transfer,
+        listener: Listener
+    ): Long {
+        var copied = 0L
+        var lastProgressAt = 0L
+        BufferedInputStream(body, BUFFER_SIZE).use { input ->
+            output.use { destination ->
+                val buffer = ByteArray(BUFFER_SIZE)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    destination.write(buffer, 0, count)
+                    copied += count
+                    transfer.receivedBytes = copied
+                    val now = System.currentTimeMillis()
+                    if (now - lastProgressAt >= PROGRESS_INTERVAL_MS) {
+                        lastProgressAt = now
+                        val progressBytes = copied
+                        dispatch {
+                            listener.onProgress(transfer.request, progressBytes, transfer.request.expectedBytes)
+                        }
+                    }
+                }
+                destination.flush()
+            }
+        }
+        if (copied != transfer.receivedBytes) transfer.receivedBytes = copied
+        val finalBytes = copied
+        dispatch { listener.onProgress(transfer.request, finalBytes, transfer.request.expectedBytes) }
+        return copied
+    }
 
     private fun createTarget(context: Context, name: String, mime: String): Target? = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -81,19 +227,40 @@ object Downloads {
             }
             Target(uri, output)
         } else {
-            // Pre-scoped-storage Android needs a dangerous storage permission for
-            // the public collection. Keep downloads in this app's external files
-            // directory instead of requesting a browser-wide storage permission.
+            // App-external storage needs no broad all-files permission and stays
+            // usable on Android 8/9. The completed file is exposed via FileProvider.
             val directory = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
                 ?: File(context.filesDir, "downloads")
             if (!directory.exists() && !directory.mkdirs()) return null
             val file = uniqueFile(directory, name)
-            Target(android.net.Uri.fromFile(file), FileOutputStream(file), file)
+            Target(Uri.fromFile(file), FileOutputStream(file), file)
         }
     } catch (error: Throwable) {
         Log.w(TAG, "could not create download destination", error)
         null
     }
+
+    /** Make Android 10+ MediaStore content visible only once it is complete. */
+    private fun publishTarget(context: Context, target: Target) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val values = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+        val changed = context.contentResolver.update(target.uri, values, null, null)
+        if (changed != 1) throw IOException("Could not publish completed download")
+    }
+
+    private fun discardTarget(context: Context, target: Target) {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                context.contentResolver.delete(target.uri, null, null)
+            } else {
+                target.legacyFile?.delete()
+            }
+        }.onFailure { Log.w(TAG, "could not remove incomplete download", it) }
+    }
+
+    private fun visibleUri(context: Context, target: Target): Uri = target.legacyFile?.let { file ->
+        FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+    } ?: target.uri
 
     private fun uniqueFile(directory: File, requestedName: String): File {
         val dot = requestedName.lastIndexOf('.')
@@ -108,28 +275,27 @@ object Downloads {
         return candidate
     }
 
-    private fun markComplete(context: Context, uri: android.net.Uri) {
-        val values = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
-        runCatching { context.contentResolver.update(uri, values, null, null) }
-            .onFailure { Log.w(TAG, "could not finalize download", it) }
-    }
-
-    private fun discardIncomplete(context: Context, uri: android.net.Uri) {
-        runCatching { context.contentResolver.delete(uri, null, null) }
-            .onFailure { Log.w(TAG, "could not remove incomplete download", it) }
-    }
-
     private fun fileNameFrom(uri: String, headers: Map<String, String>): String {
         headers["Content-Disposition"]?.let { disposition ->
             val match = Regex("filename\\*?=(?:UTF-8'')?\\\"?([^\\\";]+)\\\"?", RegexOption.IGNORE_CASE)
                 .find(disposition)
-            if (match != null) return sanitize(match.groupValues[1])
+            if (match != null) {
+                val encoded = match.groupValues[1]
+                val decoded = runCatching { URLDecoder.decode(encoded, "UTF-8") }.getOrDefault(encoded)
+                return sanitize(decoded)
+            }
         }
-        return sanitize(android.net.Uri.parse(uri).lastPathSegment ?: "download-${System.currentTimeMillis()}")
+        return sanitize(Uri.parse(uri).lastPathSegment ?: "download-${System.currentTimeMillis()}")
     }
 
     private fun sanitize(name: String): String {
-        val cleaned = name.trim().replace(Regex("[\\\\/:*?\\\"<>|]"), "_")
+        val cleaned = name.trim()
+            .replace(Regex("[\\\\/:*?\\\"<>|\\p{Cntrl}]"), "_")
+            .take(180)
         return cleaned.ifEmpty { "download-${System.currentTimeMillis()}" }
+    }
+
+    private fun dispatch(action: () -> Unit) {
+        main.post(action)
     }
 }

@@ -39,6 +39,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         fun onImportData()
         fun onClearData()
         fun onShowAbout()
+        fun onStatusBarVisibilityChanged()
         fun toast(message: String)
     }
 
@@ -180,6 +181,18 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
             "Android Back or double-tap the page",
             "Restores the normal browser controls and normal Android system bars."
         )
+
+        out += group("Android system bars")
+        out += switchRow(
+            R.drawable.ic_eyeoff,
+            "Hide Android status bar",
+            "Hides only the top clock/status bar on normal screens. Page-only mode always hides both Android bars.",
+            Prefs.hideStatusBar
+        ) { on ->
+            Prefs.hideStatusBar = on
+            callback?.onStatusBarVisibilityChanged()
+            callback?.toast(if (on) "Android status bar hidden" else "Android status bar shown")
+        }
 
         out += group("Theme")
         out += switchRow(

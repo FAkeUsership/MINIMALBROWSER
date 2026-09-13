@@ -11,7 +11,15 @@ import android.database.sqlite.SQLiteOpenHelper
 
 data class HistoryEntry(val id: Long, val url: String, val title: String, val visits: Int, val lastVisit: Long)
 data class Bookmark(val id: Long, val url: String, val title: String, val addedAt: Long)
-data class DownloadRow(val id: Long, val fileName: String, val url: String, val mime: String, val bytes: Long, val createdAt: Long)
+data class DownloadRow(
+    val id: Long,
+    val fileName: String,
+    val url: String,
+    val mime: String,
+    val bytes: Long,
+    val localUri: String,
+    val createdAt: Long
+)
 data class BlockedRow(val id: Long, val ts: Long, val host: String, val kind: String)
 data class TabRow(val id: String, val url: String, val title: String, val private: Boolean, val state: String?)
 
@@ -21,7 +29,7 @@ data class TabRow(val id: String, val url: String, val title: String, val privat
 /* ------------------------------------------------------------------ */
 
 class DataStore private constructor(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "minimal_browser.db", null, 2) {
+    SQLiteOpenHelper(context.applicationContext, "minimal_browser.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -49,6 +57,7 @@ class DataStore private constructor(context: Context) :
                    url TEXT NOT NULL,
                    mime TEXT NOT NULL DEFAULT '',
                    bytes INTEGER NOT NULL DEFAULT 0,
+                   local_uri TEXT NOT NULL DEFAULT '',
                    created_at INTEGER NOT NULL
                )"""
         )
@@ -78,6 +87,12 @@ class DataStore private constructor(context: Context) :
             // Existing v1 rows each represented one request, so their default
             // count preserves the historical daily total exactly.
             db.execSQL("ALTER TABLE blocked ADD COLUMN count INTEGER NOT NULL DEFAULT 1")
+        }
+        if (oldVersion < 3) {
+            // v1.2.5 records the actual Android content URI only after a file
+            // has been fully written, so the Downloads list can open a real
+            // completed file instead of behaving like a dead history entry.
+            db.execSQL("ALTER TABLE downloads ADD COLUMN local_uri TEXT NOT NULL DEFAULT ''")
         }
     }
 
@@ -153,23 +168,29 @@ class DataStore private constructor(context: Context) :
 
     /* ---------------- downloads ---------------- */
 
-    fun addDownload(fileName: String, url: String, mime: String, bytes: Long) {
+    fun addDownload(fileName: String, url: String, mime: String, bytes: Long, localUri: String) {
         val cv = ContentValues().apply {
             put("file_name", fileName)
             put("url", url)
             put("mime", mime)
             put("bytes", bytes)
+            put("local_uri", localUri)
             put("created_at", System.currentTimeMillis())
         }
         writableDatabase.insert("downloads", null, cv)
     }
 
     fun downloads(): List<DownloadRow> = readableDatabase.query(
-        "downloads", null, null, null, null, null, "created_at DESC"
+        "downloads",
+        arrayOf("_id", "file_name", "url", "mime", "bytes", "local_uri", "created_at"),
+        null, null, null, null, "created_at DESC"
     ).use { c ->
         val out = ArrayList<DownloadRow>(c.count)
         while (c.moveToNext()) {
-            out += DownloadRow(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getLong(4), c.getLong(5))
+            out += DownloadRow(
+                c.getLong(0), c.getString(1), c.getString(2), c.getString(3),
+                c.getLong(4), c.getString(5), c.getLong(6)
+            )
         }
         out
     }

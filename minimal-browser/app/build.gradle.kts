@@ -14,8 +14,8 @@ android {
         // Android 8.0+; the bundled Mozilla engine itself is packaged in this APK.
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.2.4"
+        versionCode = 12
+        versionName = "1.2.5"
 
         // The requested release is intentionally ARM64-only. This makes the
         // APK substantial because it carries Gecko's native ARM64 libraries,
