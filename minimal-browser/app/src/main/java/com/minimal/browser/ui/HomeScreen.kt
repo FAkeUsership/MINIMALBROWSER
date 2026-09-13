@@ -16,7 +16,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.minimal.browser.DataStore
-import com.minimal.browser.Fmt
 import com.minimal.browser.R
 import com.minimal.browser.UrlBar
 import java.text.SimpleDateFormat
@@ -237,12 +236,16 @@ class HomeScreen(context: Context) : ScrollView(context) {
         refreshGreeting()
         val ctx = context
         Thread {
-            val history = DataStore.get(ctx).history(4)
-            val today = Calendar.getInstance(TimeZone.getDefault()).apply {
-                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
-            val blockedToday = DataStore.get(ctx).blockedSince(today)
+            val result = runCatching {
+                val db = DataStore.get(ctx)
+                val history = db.history(4)
+                val today = Calendar.getInstance(TimeZone.getDefault()).apply {
+                    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                history to db.blockedSince(today)
+            }.getOrElse { emptyList<com.minimal.browser.HistoryEntry>() to 0 }
+            val (history, blockedToday) = result
             post {
                 recentsBox.removeAllViews()
                 emptyLabel.visibility = if (history.isEmpty()) VISIBLE else GONE

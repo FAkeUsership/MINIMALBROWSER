@@ -1,17 +1,24 @@
 # Changelog
 
-## v1.0.4 — Gecko native-loader repair
+## v1.1.0 — System WebView stability rewrite
 
-- Forces Android to extract GeckoView’s native libraries (`libxul`, `libnss3`, and companions) at install time through `android:extractNativeLibs="true"` and Gradle legacy JNI packaging.
-- Fixes the shipped APK’s prior `extractNativeLibs=false` manifest value, which left Gecko’s first browser-session native loader on its direct-APK loading path.
-- GitHub Actions now verifies that generated APK manifests contain `extractNativeLibs=true` and uploads `SHA256SUMS.txt` alongside the APKs.
+- Replaces the bundled native browser renderer with Android System WebView throughout the tab, navigation, download, print, data-clearing, lifecycle, and recovery paths.
+- Creates WebViews lazily at tab creation, so Home, Tabs, and Settings remain usable if the device WebView provider is unavailable; failures are contained rather than crashing the Activity.
+- Preserves a real WebView per tab, attaches only the active tab to the Web screen, and prevents background page callbacks from attaching the wrong page.
+- Handles a killed WebView renderer by replacing and reloading only its affected tab.
+- Keeps Home quick links and ordinary web navigation inside the browser, while correctly routing `mailto:`, `tel:`, `geo:`, `market:`, and `intent:` links to Android handlers/fallbacks.
+- Preserves the required page-only flow: hold **Web** for exactly five seconds; Android Back or a page double-tap restores browser controls and system bars.
+- Removes native-engine dependencies, extraction settings, ABI split assumptions, and split-APK release assets. GitHub Actions now publishes one universal System WebView APK plus `SHA256SUMS.txt`.
 
-## v1.0.3 — Android 14+ GeckoView startup repair
+## v1.0.4 — Native packaging attempt
 
-- Configures every `GeckoSession` delegate, including `ContentDelegate`, **before** calling `GeckoSession.open()`. This follows GeckoView’s documented workaround for Bug 1758212 and replaces the unsafe open-then-bind order.
-- Uses the safe visible-surface sequence: configure session → open session → attach the visible `GeckoView`. The renderer is released while Home, Tabs, and Settings are shown rather than remaining attached to a hidden view.
-- Contains session-open, session-restore, session-load, and compositor-release failures so an engine problem leaves the Minimal Browser UI usable instead of crashing the Activity.
-- Keeps the requested page-only behavior: hold **Web** for exactly five seconds; Android Back or a page double-tap restores normal controls and system bars.
+- Changed native-library extraction packaging in an attempt to address the previous renderer startup failures.
+- Superseded by v1.1.0’s System WebView migration.
+
+## v1.0.3 — Renderer startup attempt
+
+- Added defensive renderer/session startup ordering and visible-surface handling.
+- Superseded by v1.1.0’s System WebView migration.
 
 ## v1.0.2
 

@@ -1,7 +1,6 @@
 package com.minimal.browser.ui
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.Typeface
 import android.text.InputType
 import android.util.TypedValue
@@ -161,7 +160,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         3 -> "What a new tab opens."
         4 -> "Where files land and what you have fetched."
         5 -> "Take your bookmarks and history with you."
-        else -> "Minimal Browser · open source (MPL 2.0) · GeckoView engine"
+        else -> "Minimal Browser · native Android System WebView engine"
     }
 
     /* ================================================================== */
@@ -214,7 +213,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
             app().applyShields()
         }
         out += switchRow(
-            R.drawable.ic_eye, "Block fingerprinting", "Hide your device signature", Prefs.blockFingerprinting
+            R.drawable.ic_eye, "Block fingerprinting", "Disable page location APIs and known fingerprint endpoints", Prefs.blockFingerprinting
         ) { on ->
             Prefs.blockFingerprinting = on
             app().applyShields()
@@ -295,7 +294,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         }
         out += infoRow(
             R.drawable.ic_eye, "Private tabs",
-            "Private tabs never write to history, keep their own cookies and are dropped when you close them."
+            "Private tabs are excluded from app history and session restore, and are dropped when closed."
         )
         return out
     }
@@ -308,7 +307,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         }
         out += infoRow(
             R.drawable.ic_file, "Where files go",
-            "Downloads are written through MediaStore, so they appear in your Files app like any other download."
+            "Android’s Downloads service saves them so they appear in your Files app."
         )
         return out
     }
@@ -341,8 +340,8 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         }
         out += group("About")
         out += infoRow(R.drawable.ic_info, "Version", "Minimal Browser ${BuildConfig.VERSION_NAME} · open-source (MPL 2.0)")
-        out += infoRow(R.drawable.ic_globe, "Engine", "Mozilla GeckoView")
-        out += infoRow(R.drawable.ic_shield, "Block list", "Request-level EasyList-style rules plus Gecko tracking protection")
+        out += infoRow(R.drawable.ic_globe, "Engine", "Android System WebView")
+        out += infoRow(R.drawable.ic_shield, "Block list", "Local request-level EasyList-style rules")
         return out
     }
 

@@ -5,7 +5,7 @@ import android.net.Uri
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Request-level blocker that sits in front of Gecko's own tracking protection.
+ * Request-level blocker used by the System WebView client before subresources load.
  *
  * Rules are loaded from `assets/blocklist.txt`:
  *   lines starting with `!` are comments
@@ -76,16 +76,24 @@ object AdBlocker {
     enum class Verdict { ALLOW, BLOCK_AD, BLOCK_TRACKER }
 
     fun check(url: String?): Verdict {
-        if (url.isNullOrEmpty() || !Prefs.shieldsOn || !Prefs.blockAds) return Verdict.ALLOW
+        if (url.isNullOrEmpty() || !Prefs.shieldsOn) return Verdict.ALLOW
         val host = try {
             Uri.parse(url).host?.lowercase()
         } catch (e: Exception) {
             null
         } ?: return Verdict.ALLOW
-        // never block first-party navigation to the site the user asked for
-        if (matches(adRules, url, host)) return Verdict.BLOCK_AD
-        if (matches(trackerRules, url, host)) return Verdict.BLOCK_TRACKER
+        // Ad/tracker blocking is one switch. Fingerprinting has its own explicit
+        // setting so turning that setting off does not silently keep blocking it.
+        if (Prefs.blockAds && matches(adRules, url, host)) return Verdict.BLOCK_AD
+        if (Prefs.blockAds && matches(trackerRules, url, host)) return Verdict.BLOCK_TRACKER
+        if (Prefs.blockFingerprinting && isFingerprintEndpoint(url)) return Verdict.BLOCK_TRACKER
         return Verdict.ALLOW
+    }
+
+    private fun isFingerprintEndpoint(url: String): Boolean {
+        val u = url.lowercase()
+        return "/fingerprint" in u || "fingerprint.js" in u ||
+            "device-fingerprint" in u || "canvas-fingerprint" in u
     }
 
     private fun matches(rules: Rules, url: String, host: String): Boolean {

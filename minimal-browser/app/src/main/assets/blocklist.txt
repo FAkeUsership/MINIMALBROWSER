@@ -5,8 +5,8 @@
 !   ||host.tld^   host + all sub-domains
 !   /substring    matched anywhere in the URL
 !
-! This list runs *in front of* Gecko's tracking protection: a request that
-! matches is denied before it leaves the device.
+! This list is evaluated by Minimal Browser before a subresource request
+! is allowed to continue to the device WebView renderer.
 
 ## ad
 ||doubleclick.net^
@@ -183,5 +183,4 @@
 /tracking.js
 /pixel.gif
 /beacon.js
-/fingerprint
 /collect?

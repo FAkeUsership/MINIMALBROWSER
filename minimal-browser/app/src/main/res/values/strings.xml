@@ -20,10 +20,8 @@
 
     <string name="home_empty_recent">Nothing here yet — pages you open show up here.</string>
 
-    <!-- page-only mode and engine recovery -->
-    <string name="t_engine_failed">Engine did not start — pages cannot load (%1$s)</string>
-    <string name="t_engine_failed_generic">Engine did not start — pages cannot load</string>
-    <string name="t_engine_session_failed">Browser could not start a page. Try reopening Minimal Browser.</string>
+    <!-- page-only mode and browser recovery -->
+    <string name="t_webview_failed">Android WebView could not start a page. Update Android System WebView or Chrome, then try again.</string>
     <string name="t_hold_hint">Keep holding to enter page-only mode…</string>
     <string name="t_hold_web_hint">Hold the Web icon (left rail) for 5 seconds</string>
     <string name="t_tab_closed">Tab closed</string>

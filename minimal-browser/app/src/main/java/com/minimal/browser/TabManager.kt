@@ -1,236 +1,99 @@
 package com.minimal.browser
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import androidx.core.app.ActivityCompat
-import org.mozilla.geckoview.AllowOrDeny
-import org.mozilla.geckoview.ContentBlocking
-import org.mozilla.geckoview.GeckoResult
-import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.GeckoSessionSettings
-import org.mozilla.geckoview.GeckoView
-import org.mozilla.geckoview.WebResponse
-import java.util.UUID
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebStorage
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import java.io.ByteArrayInputStream
 import kotlin.math.max
+import kotlin.math.min
 
 /**
- * Multi-tab controller. One [GeckoView] is shared; tabs swap their
- * [GeckoSession] in and out of it — one shared rendering surface for the app.
+ * Stable tab controller built on Android System WebView.
+ *
+ * The former bundled-engine controller was the crash source: opening a first
+ * browser session created a native child process and failed on the affected
+ * Android 14+ device. System WebView is maintained by Android/Chrome and its
+ * renderer-death callback lets us recover without taking down the Activity.
  */
 object TabManager {
 
     private const val TAG = "TabManager"
+    private val main = Handler(Looper.getMainLooper())
 
     val tabs = mutableListOf<Tab>()
     var active: Tab? = null
         private set
 
-    var view: GeckoView? = null
-        private set
-    private var runtime: GeckoRuntime? = null
-    private val main = Handler(Looper.getMainLooper())
-
-    /** Set by MainActivity. */
+    /** Set by MainActivity while the UI is alive. */
     var host: Host? = null
 
     interface Host {
         fun activeContext(): Context?
         fun onTabsChanged()
-        fun onActiveTabChanged(tab: Tab)
+        fun onActiveTabChanged(tab: Tab?)
         fun onProgress(tab: Tab, progress: Int)
         fun onPageFinished(tab: Tab, successful: Boolean)
         fun onSecurityChanged(tab: Tab)
         fun onBlockedOnPage(tab: Tab)
         fun onBlockedTotal(kind: String, host: String)
-        fun onEnterVideoFullScreen(fullScreen: Boolean)
         fun onDownloadStarted(fileName: String)
-        fun onRequestAndroidPermissions(permissions: Array<String>, cb: GeckoSession.PermissionDelegate.Callback)
-        fun onTabWantsToClose(tab: Tab)
+        fun onRendererRecovered(tab: Tab)
     }
 
     /* ------------------------------------------------------------------ */
-    /*  lifecycle                                                          */
+    /*  tab lifecycle                                                     */
     /* ------------------------------------------------------------------ */
 
-    fun init(runtime: GeckoRuntime) {
-        if (this.runtime != null) return
-        this.runtime = runtime
-    }
-
-    fun attach(v: GeckoView) {
-        view = v
-        val tab = active
-        // setSession(null) would throw — only attach when there is a live tab.
-        if (tab == null) return
-        try {
-            if (v.session !== tab.session) v.setSession(tab.session)
-            tab.session.setActive(true)
-        } catch (e: Throwable) {
-            // Never let a compositor/session race take the process down; the screen
-            // just retries on the next resume.
-            Log.e(TAG, "setSession failed", e)
-        }
-    }
-
-    fun detach() {
-        // Release only the compositor attachment; the open GeckoSession remains
-        // available for the next Web view. This is intentionally guarded because
-        // Android may tear down a Surface before Activity.onPause finishes.
-        val attachedView = view
-        view = null
-        try {
-            attachedView?.releaseSession()
-        } catch (e: Throwable) {
-            Log.w(TAG, "releaseSession failed", e)
-        }
-    }
-
-    /* ------------------------------------------------------------------ */
-    /*  tab plumbing                                                       */
-    /* ------------------------------------------------------------------ */
-
-    private fun newSession(private: Boolean): GeckoSession {
-        // 153 exposes no public setContextId/setUsePrivateMode — the only correct way
-        // to get a real private session is to build the settings up front. Mutating
-        // them after GeckoSession(settings) is ignored by the engine, which is why the
-        // old reflection hack silently produced a *normal* tab.
-        val builder = GeckoSessionSettings.Builder()
-            .useTrackingProtection(Prefs.shieldsOn)
-            .suspendMediaWhenInactive(true)
-            .allowJavascript(Prefs.javaScriptEnabled)
-            .userAgentMode(
-                if (Prefs.desktopUserAgent) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
-                else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
-            )
-            .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
-        if (private) {
-            builder.usePrivateMode(true)
-                .contextId("private-" + UUID.randomUUID())
-        }
-        // Keep this session closed until bind(tab) has installed its ContentDelegate.
-        // GeckoView's own quick-start requires that ordering as a workaround for
-        // Bug 1758212. Opening first (the previous code path) can crash the browser
-        // content process on current Android releases.
-        return GeckoSession(builder.build())
-    }
-
-    private fun open(tab: Tab) {
-        val rt = runtime ?: BrowserApp.requireRuntime()
-        // bind(tab) runs before this call. In particular, ContentDelegate must be
-        // present before GeckoSession.open(), not attached after the native window.
-        tab.session.open(rt)
-    }
-
-    /** Create a fully configured, opened session or leave no half-open native state. */
-    private fun createOpenedTab(private: Boolean): Tab {
-        val tab = Tab(newSession(private), private)
-        try {
-            bind(tab)
-            open(tab)
-        } catch (e: Throwable) {
-            try {
-                tab.session.close()
-            } catch (_: Throwable) {
-                // open() can fail before a window exists; either way there is no tab to keep.
-            }
-            Log.e(TAG, "GeckoSession setup/open failed", e)
-            throw e
-        }
-        return tab
-    }
-
-    private fun bind(tab: Tab) {
-        val s = tab.session
-        s.navigationDelegate = NavigationDelegateImpl(tab)
-        s.progressDelegate = ProgressDelegateImpl(tab)
-        s.contentDelegate = ContentDelegateImpl(tab)
-        s.permissionDelegate = PermissionDelegateImpl(tab)
-        s.historyDelegate = HistoryDelegateImpl(tab)
-        s.setContentBlockingDelegate(object : ContentBlocking.Delegate {
-            override fun onContentBlocked(session: GeckoSession, event: ContentBlocking.BlockEvent) {
-                val cat = event.antiTrackingCategory
-                val isAd = (cat and (ContentBlocking.AntiTracking.AD or
-                    ContentBlocking.AntiTracking.CONTENT or
-                    ContentBlocking.AntiTracking.CRYPTOMINING)) != 0
-                if (isAd) tab.blockedAds++ else tab.blockedTrackers++
-                val h = UrlBar.hostOf(event.uri)
-                host?.activeContext()?.let { ctx ->
-                    thread { DataStore.get(ctx).recordBlocked(h, if (isAd) "ad" else "tracker") }
-                }
-                host?.onBlockedOnPage(tab)
-                host?.onBlockedTotal(if (isAd) "ad" else "tracker", h)
-            }
-        })
-    }
-
-    /** Fire-and-forget DB work off the UI thread. */
-    private fun thread(block: () -> Unit) {
-        Thread {
-            try {
-                block()
-            } catch (e: Exception) {
-                Log.w(TAG, "background work failed: ${e.message}")
-            }
-        }.start()
-    }
-
-    /* ------------------------------------------------------------------ */
-    /*  public API                                                         */
-    /* ------------------------------------------------------------------ */
-
-    fun newTab(url: String? = null, private: Boolean = false, activate: Boolean = true): Tab {
-        // Delegate binding deliberately happens before GeckoSession.open() inside
-        // createOpenedTab(). Do not inline/reorder this: GeckoView documents it as
-        // required on Android because an unbound ContentDelegate can crash startup.
-        val tab = createOpenedTab(private)
+    /** Creates a WebView tab. Caller catches this boundary for provider failures. */
+    fun newTab(
+        context: Context,
+        url: String? = null,
+        privateMode: Boolean = false,
+        activate: Boolean = true
+    ): Tab {
+        val tab = Tab(privateMode)
+        tab.webView = createWebView(context, tab)
         tabs += tab
         if (activate) switchTo(tab) else host?.onTabsChanged()
-        if (!url.isNullOrEmpty()) {
-            try {
-                tab.session.load(GeckoSession.Loader().uri(url))
-            } catch (e: Throwable) {
-                // The opened tab is still usable; avoid turning a bad initial URI or
-                // transient native queue failure into an Activity crash.
-                Log.w(TAG, "initial tab load failed: ${e.message}")
-            }
-        }
+        if (!url.isNullOrBlank()) load(tab, url)
         return tab
     }
 
     fun switchTo(tab: Tab) {
-        if (active == tab) {
+        if (!tabs.contains(tab)) return
+        if (active === tab) {
             host?.onActiveTabChanged(tab)
             return
         }
-        val previous = active
-        if (previous != null) {
-            captureThumbnail(previous)
-            try {
-                previous.session.setActive(false)
-            } catch (e: Throwable) {
-                Log.w(TAG, "could not deactivate previous session", e)
-            }
+        try {
+            active?.webView?.onPause()
+        } catch (e: Throwable) {
+            Log.w(TAG, "could not pause previous tab", e)
         }
         active = tab
-        val v = view
-        if (v != null) {
-            try {
-                if (previous != null) v.releaseSession()
-                v.setSession(tab.session)
-            } catch (e: Throwable) {
-                Log.e(TAG, "switchTo setSession failed", e)
-            }
-        }
         try {
-            tab.session.setActive(true)
-            tab.session.setFocused(true)
+            tab.webView?.onResume()
         } catch (e: Throwable) {
-            Log.e(TAG, "could not activate session", e)
+            Log.w(TAG, "could not resume tab", e)
         }
+        updateNavigationState(tab)
         host?.onTabsChanged()
         host?.onActiveTabChanged(tab)
     }
@@ -238,458 +101,513 @@ object TabManager {
     fun close(tab: Tab) {
         val index = tabs.indexOf(tab)
         if (index < 0) return
+        val wasActive = active === tab
         tabs.removeAt(index)
-        if (active == tab) {
-            active = null
-            try {
-                view?.releaseSession()
-            } catch (e: Throwable) {
-                Log.w(TAG, "releaseSession while closing a tab failed", e)
-            }
-            val next = tabs.getOrNull(max(0, index - 1))
-            if (next != null) {
-                switchTo(next)
-            } else {
-                host?.onTabsChanged()
-            }
-        } else {
-            host?.onTabsChanged()
+        if (wasActive) {
+            active = tabs.getOrNull(max(0, index - 1))
+            active?.let { updateNavigationState(it) }
+            // MainActivity detaches the old view before it is destroyed below.
+            host?.onActiveTabChanged(active)
         }
-        try {
-            tab.session.close()
-        } catch (e: Exception) {
-            Log.w(TAG, "close failed: ${e.message}")
-        }
+        destroyTab(tab)
+        host?.onTabsChanged()
     }
 
     fun closeActive() {
-        active?.let { close(it) }
+        active?.let(::close)
     }
 
+    fun closeAll() {
+        val old = tabs.toList()
+        tabs.clear()
+        active = null
+        host?.onActiveTabChanged(null)
+        old.forEach(::destroyTab)
+        host?.onTabsChanged()
+    }
+
+    fun pauseActive() {
+        try {
+            active?.webView?.onPause()
+        } catch (e: Throwable) {
+            Log.w(TAG, "WebView pause failed", e)
+        }
+    }
+
+    fun resumeActive() {
+        try {
+            active?.webView?.onResume()
+        } catch (e: Throwable) {
+            Log.w(TAG, "WebView resume failed", e)
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  navigation                                                        */
+    /* ------------------------------------------------------------------ */
+
     fun goBack(): Boolean {
-        val t = active ?: return false
-        if (!t.canGoBack) return false
-        t.session.goBack()
-        return true
+        val tab = active ?: return false
+        val view = tab.webView ?: return false
+        return try {
+            if (!view.canGoBack()) return false
+            view.goBack()
+            true
+        } catch (e: Throwable) {
+            Log.w(TAG, "back navigation failed", e)
+            false
+        }
     }
 
     fun goForward(): Boolean {
-        val t = active ?: return false
-        if (!t.canGoForward) return false
-        t.session.goForward()
-        return true
+        val tab = active ?: return false
+        val view = tab.webView ?: return false
+        return try {
+            if (!view.canGoForward()) return false
+            view.goForward()
+            true
+        } catch (e: Throwable) {
+            Log.w(TAG, "forward navigation failed", e)
+            false
+        }
     }
 
     fun reload() {
-        active?.session?.reload()
+        try {
+            active?.webView?.reload()
+        } catch (e: Throwable) {
+            Log.w(TAG, "reload failed", e)
+        }
     }
 
     fun stop() {
-        active?.session?.stop()
+        try {
+            active?.webView?.stopLoading()
+        } catch (e: Throwable) {
+            Log.w(TAG, "stop failed", e)
+        }
     }
 
-    fun loadInActive(url: String) {
-        val t = active ?: newTab(url).also { return }
-        t.session.load(GeckoSession.Loader().uri(url))
+    /** @return false when there is no live active tab. */
+    fun loadInActive(url: String): Boolean {
+        val tab = active ?: return false
+        return load(tab, url)
     }
 
     fun findInPage(query: String, forward: Boolean = true) {
-        active?.session?.finder?.find(query, if (forward) 0 else GeckoSession.FINDER_FIND_BACKWARDS)
+        val view = active?.webView ?: return
+        try {
+            if (query.isBlank()) {
+                view.clearMatches()
+            } else {
+                view.findAllAsync(query)
+                view.findNext(forward)
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "find failed", e)
+        }
     }
 
     fun clearFind() {
-        active?.session?.finder?.clear()
-    }
-
-    fun exitPageFullScreen() {
-        active?.session?.exitFullScreen()
-    }
-
-    fun setTrackingProtection(on: Boolean) {
-        tabs.forEach { it.session.settings.setUseTrackingProtection(on) }
-    }
-
-    fun setUserAgentMode(mode: Int) {
-        tabs.forEach { it.session.settings.setUserAgentMode(mode) }
-    }
-
-    fun setAllowJavascript(on: Boolean) {
-        tabs.forEach { it.session.settings.setAllowJavascript(on) }
+        try {
+            active?.webView?.clearMatches()
+        } catch (e: Throwable) {
+            Log.w(TAG, "clear find failed", e)
+        }
     }
 
     /* ------------------------------------------------------------------ */
-    /*  thumbnails + session restore                                       */
+    /*  settings, thumbnails, persistence                                 */
     /* ------------------------------------------------------------------ */
+
+    fun applySettings() {
+        tabs.forEach { tab ->
+            try {
+                configureSettings(tab)
+            } catch (e: Throwable) {
+                Log.w(TAG, "could not apply WebView settings", e)
+            }
+        }
+    }
 
     fun captureThumbnail(tab: Tab) {
+        val view = tab.webView ?: return
+        if (view.width <= 0 || view.height <= 0) return
         try {
-            val display = tab.session.acquireDisplay() ?: return
-            display.screenshot()
-                .aspectPreservingSize(720)
-                .capture()
-                .accept(
-                    { bmp ->
-                        if (bmp != null) {
-                            tab.thumbnail?.recycle()
-                            tab.thumbnail = bmp.copy(Bitmap.Config.ARGB_8888, false) ?: bmp
-                            host?.onTabsChanged()
-                        }
-                    },
-                    { /* capture can fail for background tabs — that is fine */ }
-                )
+            val width = min(720, view.width)
+            val height = max(1, (view.height.toFloat() * width / view.width).toInt())
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            val scale = width.toFloat() / view.width.toFloat()
+            canvas.scale(scale, scale)
+            view.draw(canvas)
+            tab.thumbnail?.recycle()
+            tab.thumbnail = bitmap
+            host?.onTabsChanged()
         } catch (e: Throwable) {
-            Log.w(TAG, "thumbnail capture failed: ${e.message}")
+            Log.w(TAG, "thumbnail capture failed", e)
         }
     }
 
     fun persist() {
-        val ctx = host?.activeContext() ?: return
-        val snapshot = tabs.map { t ->
-            var state: String? = null
-            try {
-                t.session.flushSessionState()
-                state = t.sessionState?.toString()
-            } catch (e: Throwable) {
-                state = null
-            }
-            t.stateJson = state
-            TabRow(t.id, t.url, t.title, t.private, state)
+        val context = host?.activeContext() ?: return
+        val snapshot = tabs.map { tab ->
+            TabRow(tab.id, tab.url, tab.title, tab.private, null)
         }
-        thread { DataStore.get(ctx).saveTabs(snapshot) }
+        background { DataStore.get(context).saveTabs(snapshot) }
     }
 
-    /** Rebuild the previous window; returns false when there is nothing to restore. */
-    fun restore(ctx: Context): Boolean {
-        val rows = DataStore.get(ctx).loadTabs()
-        val restorable = rows.filter { !it.private }
+    /** Restores URLs only; opaque saved session state from old builds is ignored safely. */
+    fun restore(context: Context): Boolean {
+        val rows = runCatching { DataStore.get(context).loadTabs() }.getOrElse {
+            Log.w(TAG, "tab restore database read failed", it)
+            emptyList()
+        }
+        val restorable = rows.filter { !it.private && it.url.isNotBlank() }.take(8)
         if (restorable.isEmpty()) return false
-        var restoredAny = false
-        for (row in restorable.take(8)) {
-            // Bind the ContentDelegate before open here as well. Restored tabs used
-            // to have the same unsafe open-then-bind order as newly created tabs.
-            val tab = try {
-                createOpenedTab(false).also { it.id = row.id }
-            } catch (e: Throwable) {
-                Log.w(TAG, "skipping tab that could not open: ${row.url}", e)
-                continue
-            }
-            tabs += tab
-            tab.url = row.url
-            tab.title = row.title
-            var ok = false
-            if (!row.state.isNullOrEmpty()) {
-                try {
-                    tab.session.restoreState(GeckoSession.SessionState.fromString(row.state!!)!!)
-                    ok = true
-                } catch (e: Throwable) {
-                    Log.w(TAG, "restore failed for ${row.url}: ${e.message}")
-                }
-            }
-            if (!ok && row.url.isNotEmpty()) {
-                try {
-                    tab.session.load(GeckoSession.Loader().uri(row.url))
-                } catch (e: Throwable) {
-                    Log.w(TAG, "load during restore failed for ${row.url}: ${e.message}")
-                }
-            }
-            restoredAny = true
-        }
-        return restoredAny
-    }
 
-    fun closeAll() {
-        for (t in tabs.toList()) {
+        var restored = false
+        for (row in restorable) {
             try {
-                t.session.close()
-            } catch (_: Exception) {
-            }
-        }
-        tabs.clear()
-        active = null
-        detach()
-        host?.onTabsChanged()
-    }
-
-    /* ------------------------------------------------------------------ */
-    /*  delegates                                                          */
-    /* ------------------------------------------------------------------ */
-
-    private class NavigationDelegateImpl(val tab: Tab) : GeckoSession.NavigationDelegate {
-
-        override fun onLocationChange(
-            session: GeckoSession,
-            url: String?,
-            permissions: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
-            hasUserGesture: Boolean
-        ) {
-            url ?: return
-            if (url.startsWith("about:")) return
-            tab.url = url
-            if (!tab.private) {
-                val ctx = host?.activeContext()
-                if (ctx != null) thread { DataStore.get(ctx).recordVisit(url, tab.title) }
-            }
-            host?.onActiveTabChanged(tab)
-            host?.onTabsChanged()
-        }
-
-        override fun onCanGoBack(session: GeckoSession, goBack: Boolean) {
-            tab.canGoBack = goBack
-            host?.onActiveTabChanged(tab)
-        }
-
-        override fun onCanGoForward(session: GeckoSession, goForward: Boolean) {
-            tab.canGoForward = goForward
-            host?.onActiveTabChanged(tab)
-        }
-
-        override fun onLoadRequest(
-            session: GeckoSession,
-            request: GeckoSession.NavigationDelegate.LoadRequest
-        ): GeckoResult<AllowOrDeny> {
-            val uri = request.uri
-            // Our own request-level blocker gets the first word.
-            when (AdBlocker.check(uri)) {
-                AdBlocker.Verdict.BLOCK_AD -> {
-                    tab.blockedAds++
-                    reportBlocked("ad", uri)
-                    return GeckoResult.deny()
-                }
-                AdBlocker.Verdict.BLOCK_TRACKER -> {
-                    tab.blockedTrackers++
-                    reportBlocked("tracker", uri)
-                    return GeckoResult.deny()
-                }
-                else -> {}
-            }
-            // Hand non-web schemes to the OS.
-            if (uri != null && !uri.startsWith("http", true) &&
-                !uri.startsWith("about:", true) && !uri.startsWith("data:", true) &&
-                !uri.startsWith("blob:", true)
-            ) {
-                val ctx = host?.activeContext()
-                if (ctx != null && External.openUri(ctx, uri)) return GeckoResult.deny()
-            }
-            return GeckoResult.allow()
-        }
-
-        override fun onSubframeLoadRequest(
-            session: GeckoSession,
-            request: GeckoSession.NavigationDelegate.LoadRequest
-        ): GeckoResult<AllowOrDeny> {
-            when (AdBlocker.check(request.uri)) {
-                AdBlocker.Verdict.BLOCK_AD -> {
-                    tab.blockedAds++
-                    reportBlocked("ad", request.uri)
-                    return GeckoResult.deny()
-                }
-                AdBlocker.Verdict.BLOCK_TRACKER -> {
-                    tab.blockedTrackers++
-                    reportBlocked("tracker", request.uri)
-                    return GeckoResult.deny()
-                }
-                else -> return GeckoResult.allow()
-            }
-        }
-
-        override fun onNewSession(
-            session: GeckoSession,
-            url: String
-        ): GeckoResult<GeckoSession> {
-            // target="_blank" and window.open() become a real new tab. Never let
-            // an engine-side request throw through Gecko's callback thread.
-            return try {
-                GeckoResult.fromValue(newTab(url, private = active?.private == true).session)
+                val tab = newTab(context, privateMode = false, activate = false)
+                tab.id = row.id
+                tab.title = row.title
+                load(tab, row.url)
+                restored = true
             } catch (e: Throwable) {
-                Log.e(TAG, "could not open requested child session", e)
-                GeckoResult.fromException<GeckoSession>(e)
+                Log.w(TAG, "skipping unrecoverable saved tab ${row.url}", e)
             }
         }
+        return restored
+    }
 
-        override fun onLoadError(
-            session: GeckoSession,
-            uri: String?,
-            error: org.mozilla.geckoview.WebRequestError
-        ): GeckoResult<String> {
-            return GeckoResult.fromValue(ErrorPages.dataUrlFor(uri, error))
-        }
-
-        private fun reportBlocked(kind: String, uri: String?) {
-            val h = UrlBar.hostOf(uri)
-            val ctx = host?.activeContext()
-            if (ctx != null) thread { DataStore.get(ctx).recordBlocked(h, kind) }
-            host?.onBlockedOnPage(tab)
-            host?.onBlockedTotal(kind, h)
+    /** Clear cookies/site data/cache on the UI thread after the Settings action. */
+    fun clearWebData(clearCookies: Boolean, clearCache: Boolean, clearHistory: Boolean) {
+        try {
+            if (clearHistory) tabs.forEach { it.webView?.clearHistory() }
+            if (clearCache) tabs.forEach { it.webView?.clearCache(true) }
+            if (clearCookies) {
+                CookieManager.getInstance().removeAllCookies(null)
+                CookieManager.getInstance().flush()
+                WebStorage.getInstance().deleteAllData()
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "web data clear failed", e)
         }
     }
 
-    private class ProgressDelegateImpl(val tab: Tab) : GeckoSession.ProgressDelegate {
-        override fun onPageStart(session: GeckoSession, url: String) {
-            tab.url = url
-            tab.blockedAds = 0
-            tab.blockedTrackers = 0
-            host?.onProgress(tab, 10)
-            host?.onActiveTabChanged(tab)
-        }
+    /* ------------------------------------------------------------------ */
+    /*  WebView setup + callbacks                                         */
+    /* ------------------------------------------------------------------ */
 
-        override fun onProgressChange(session: GeckoSession, progress: Int) {
-            host?.onProgress(tab, progress)
-        }
-
-        override fun onPageStop(session: GeckoSession, successful: Boolean) {
-            host?.onProgress(tab, 100)
-            host?.onPageFinished(tab, successful)
-            if (successful) captureThumbnail(tab)
-        }
-
-        override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
-            tab.sessionState = state
-        }
-
-        override fun onSecurityChange(
-            session: GeckoSession,
-            securityInfo: GeckoSession.ProgressDelegate.SecurityInformation
-        ) {
-            tab.isSecure = securityInfo.isSecure
-            host?.onSecurityChanged(tab)
-            host?.onActiveTabChanged(tab)
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun createWebView(context: Context, tab: Tab): WebView {
+        // Set this before configureSettings(tab): that helper intentionally works
+        // from the tab model so live Settings changes and newly created tabs share
+        // exactly the same configuration path.
+        val created = WebView(context)
+        tab.webView = created
+        return created.apply {
+            setBackgroundColor(android.graphics.Color.WHITE)
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            settings.apply {
+                javaScriptEnabled = Prefs.javaScriptEnabled
+                domStorageEnabled = true
+                databaseEnabled = true
+                loadsImagesAutomatically = true
+                setSupportZoom(true)
+                builtInZoomControls = true
+                displayZoomControls = false
+                mediaPlaybackRequiresUserGesture = true
+                javaScriptCanOpenWindowsAutomatically = false
+                setSupportMultipleWindows(false)
+                allowFileAccess = false
+                allowContentAccess = false
+                setGeolocationEnabled(!Prefs.blockFingerprinting)
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                textZoom = Prefs.textSizePercent
+            }
+            tab.defaultUserAgent = settings.userAgentString.orEmpty()
+            configureSettings(tab)
+            if (tab.private) {
+                // System WebView storage is process-wide, so do not wipe normal
+                // tabs' cache here. Private tabs are excluded from our history/
+                // restore database and avoid writing new HTTP cache entries.
+                settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                clearHistory()
+            }
+            webViewClient = BrowserClient(tab)
+            webChromeClient = BrowserChrome(tab)
+            setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+                queueDownload(tab, url, userAgent, contentDisposition, mimeType, contentLength)
+            }
         }
     }
 
-    private class ContentDelegateImpl(val tab: Tab) : GeckoSession.ContentDelegate {
-        override fun onTitleChange(session: GeckoSession, title: String?) {
-            val t = title?.trim().orEmpty()
-            if (t.isNotEmpty()) tab.title = t
-            if (!tab.private && tab.url.isNotEmpty() && t.isNotEmpty()) {
-                val ctx = host?.activeContext()
-                if (ctx != null) thread { DataStore.get(ctx).retitle(tab.url, t) }
-            }
-            host?.onActiveTabChanged(tab)
-            host?.onTabsChanged()
-        }
-
-        override fun onCloseRequest(session: GeckoSession) {
-            host?.onTabWantsToClose(tab)
-        }
-
-        override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
-            host?.onEnterVideoFullScreen(fullScreen)
-        }
-
-        override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
-            val ctx = host?.activeContext() ?: return
-            val name = Downloads.start(ctx, response)
-            if (name != null) {
-                host?.onDownloadStarted(name)
-                if (!tab.private) {
-                    thread {
-                        DataStore.get(ctx).addDownload(
-                            name, response.uri,
-                            response.headers["Content-Type"] ?: "",
-                            response.headers["Content-Length"]?.toLongOrNull() ?: -1L
-                        )
-                    }
-                }
-            }
-        }
-
-        override fun onFirstContentfulPaint(session: GeckoSession) {
-            main.postDelayed({ captureThumbnail(tab) }, 400)
-        }
-
-        override fun onContextMenu(
-            session: GeckoSession,
-            screenX: Int,
-            screenY: Int,
-            element: GeckoSession.ContentDelegate.ContextElement
-        ) {
-            // Keep the surface simple: no custom context menu.
-        }
-    }
-
-    /** History visits straight from Gecko — feeds "Continue reading" on the home screen. */
-    private class HistoryDelegateImpl(val tab: Tab) : GeckoSession.HistoryDelegate {
-        override fun onVisited(
-            session: GeckoSession,
-            url: String,
-            lastVisitedURL: String?,
-            flags: Int
-        ): GeckoResult<Boolean> {
-            if (tab.private || url.startsWith("about:")) {
-                return GeckoResult.fromValue(false)
-            }
-            val ctx = host?.activeContext()
-            if (ctx != null) thread { DataStore.get(ctx).recordVisit(url, tab.title) }
-            return GeckoResult.fromValue(true)
-        }
-    }
-
-    private class PermissionDelegateImpl(val tab: Tab) : GeckoSession.PermissionDelegate {
-        override fun onAndroidPermissionsRequest(
-            session: GeckoSession,
-            permissions: Array<String>?,
-            callback: GeckoSession.PermissionDelegate.Callback
-        ) {
-            if (permissions.isNullOrEmpty()) {
-                callback.grant()
-                return
-            }
-            host?.onRequestAndroidPermissions(permissions, callback) ?: callback.reject()
-        }
-
-        override fun onContentPermissionRequest(
-            session: GeckoSession,
-            permission: GeckoSession.PermissionDelegate.ContentPermission
-        ): GeckoResult<Int> {
-            val allowed = when (permission.permission) {
-                GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION -> Prefs.shieldsOn
-                GeckoSession.PermissionDelegate.PERMISSION_TRACKING -> !Prefs.shieldsOn
-                GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE -> false
-                GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE -> true
-                else -> false
-            }
-            return GeckoResult.fromValue(
-                if (allowed) GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
-                else GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+    @Suppress("DEPRECATION")
+    private fun configureSettings(tab: Tab) {
+        val view = tab.webView ?: return
+        val settings = view.settings
+        settings.javaScriptEnabled = Prefs.javaScriptEnabled
+        settings.textZoom = Prefs.textSizePercent
+        settings.setGeolocationEnabled(!Prefs.blockFingerprinting)
+        settings.useWideViewPort = Prefs.desktopUserAgent
+        settings.loadWithOverviewMode = Prefs.desktopUserAgent
+        val defaultUa = tab.defaultUserAgent.ifBlank { settings.userAgentString.orEmpty() }
+        if (tab.defaultUserAgent.isBlank()) tab.defaultUserAgent = defaultUa
+        settings.userAgentString = if (Prefs.desktopUserAgent) desktopUserAgent(defaultUa) else defaultUa
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            settings.setForceDark(
+                if (Prefs.bwTheme) WebSettings.FORCE_DARK_ON else WebSettings.FORCE_DARK_OFF
             )
         }
+    }
 
-        override fun onMediaPermissionRequest(
-            session: GeckoSession,
-            deviceOrigin: String,
-            video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
-            audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
-            callback: GeckoSession.PermissionDelegate.MediaCallback
-        ) {
-            val ctx = host?.activeContext()
-            if (ctx == null) {
-                callback.reject()
-                return
+    private fun desktopUserAgent(defaultUa: String): String {
+        if (defaultUa.isBlank()) {
+            return "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/120 Safari/537.36"
+        }
+        return defaultUa
+            .replace(Regex("\\sMobile(?:/[A-Za-z0-9.]+)?", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("Android [^;)]+", RegexOption.IGNORE_CASE), "X11; Linux x86_64")
+    }
+
+    private fun load(tab: Tab, rawUrl: String): Boolean {
+        val view = tab.webView ?: return false
+        val url = upgradeToHttps(rawUrl)
+        if (url.isBlank()) return false
+        return try {
+            tab.url = url
+            tab.isSecure = url.startsWith("https://", ignoreCase = true)
+            view.loadUrl(url)
+            true
+        } catch (e: Throwable) {
+            Log.w(TAG, "load failed for $url", e)
+            host?.onPageFinished(tab, false)
+            false
+        }
+    }
+
+    private fun upgradeToHttps(url: String): String =
+        if (Prefs.httpsOnly && url.startsWith("http://", ignoreCase = true)) {
+            "https://${url.substringAfter("://")}"
+        } else {
+            url
+        }
+
+    private fun updateNavigationState(tab: Tab) {
+        val view = tab.webView ?: return
+        tab.canGoBack = runCatching { view.canGoBack() }.getOrDefault(false)
+        tab.canGoForward = runCatching { view.canGoForward() }.getOrDefault(false)
+        tab.isSecure = tab.url.startsWith("https://", ignoreCase = true)
+    }
+
+    private fun destroyTab(tab: Tab) {
+        tab.thumbnail?.recycle()
+        tab.thumbnail = null
+        val view = tab.webView
+        tab.webView = null
+        try {
+            view?.apply {
+                (parent as? ViewGroup)?.removeView(this)
+                stopLoading()
+                clearHistory()
+                removeAllViews()
+                destroy()
             }
-            val need = ArrayList<String>()
-            if (!video.isNullOrEmpty() &&
-                ActivityCompat.checkSelfPermission(ctx, android.Manifest.permission.CAMERA)
-                != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) need += android.Manifest.permission.CAMERA
-            if (!audio.isNullOrEmpty() &&
-                ActivityCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO)
-                != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) need += android.Manifest.permission.RECORD_AUDIO
+        } catch (e: Throwable) {
+            Log.w(TAG, "WebView destroy failed", e)
+        }
+    }
 
-            if (need.isEmpty()) {
-                callback.grant(video?.firstOrNull(), audio?.firstOrNull())
-            } else {
-                host?.onRequestAndroidPermissions(need.toTypedArray(),
-                    object : GeckoSession.PermissionDelegate.Callback {
-                        override fun grant() {
-                            callback.grant(video?.firstOrNull(), audio?.firstOrNull())
-                        }
+    /**
+     * A WebView renderer may be killed independently of the Activity. Replace
+     * only that tab's view on the main thread and reload its last page; never let
+     * an old/background tab replace the visible active surface.
+     */
+    private fun recoverRenderer(tab: Tab, deadView: WebView) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            main.post { recoverRenderer(tab, deadView) }
+            return
+        }
+        if (tab.webView !== deadView) return
 
-                        override fun reject() {
-                            callback.reject()
-                        }
-                    }) ?: callback.reject()
+        val lastUrl = tab.url
+        tab.webView = null
+        try {
+            (deadView.parent as? ViewGroup)?.removeView(deadView)
+            deadView.destroy()
+        } catch (e: Throwable) {
+            Log.w(TAG, "dead WebView cleanup failed", e)
+        }
+
+        try {
+            val context = host?.activeContext() ?: return
+            createWebView(context, tab)
+            if (lastUrl.isNotBlank()) load(tab, lastUrl)
+            host?.onRendererRecovered(tab)
+            host?.onTabsChanged()
+        } catch (e: Throwable) {
+            Log.e(TAG, "WebView renderer replacement failed", e)
+            tab.webView = null
+            host?.onRendererRecovered(tab)
+            host?.onTabsChanged()
+        }
+    }
+
+    private fun queueDownload(
+        tab: Tab,
+        url: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?,
+        contentLength: Long
+    ) {
+        val context = host?.activeContext() ?: return
+        val name = Downloads.start(context, url, userAgent, contentDisposition, mimeType, contentLength)
+            ?: return
+        if (!tab.private) {
+            background {
+                DataStore.get(context).addDownload(name, url, mimeType.orEmpty(), contentLength)
+            }
+        }
+        host?.onDownloadStarted(name)
+    }
+
+    private fun reportBlocked(tab: Tab, kind: String, url: String) {
+        // shouldInterceptRequest may run off the UI thread. Keep tab state and
+        // UI callbacks serialized on the main thread.
+        val pageHost = UrlBar.hostOf(url)
+        main.post {
+            if (tabs.contains(tab)) {
+                if (kind == "ad") tab.blockedAds++ else tab.blockedTrackers++
+                host?.activeContext()?.let { context ->
+                    background { DataStore.get(context).recordBlocked(pageHost, kind) }
+                }
+                host?.onBlockedOnPage(tab)
+                host?.onBlockedTotal(kind, pageHost)
             }
         }
     }
+
+    private fun background(block: () -> Unit) {
+        Thread({
+            try {
+                block()
+            } catch (e: Throwable) {
+                Log.w(TAG, "background work failed", e)
+            }
+        }, "minimal-browser-store").start()
+    }
+
+    private class BrowserClient(private val tab: Tab) : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+            handleNavigation(view, request.url.toString())
+
+        @Suppress("DEPRECATION")
+        override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean =
+            handleNavigation(view, url)
+
+        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            if (tab.webView !== view) return
+            tab.url = url
+            tab.title = view.title.orEmpty().ifBlank { tab.title }
+            tab.isSecure = url.startsWith("https://", ignoreCase = true)
+            tab.blockedAds = 0
+            tab.blockedTrackers = 0
+            updateNavigationState(tab)
+            host?.onProgress(tab, 10)
+            host?.onSecurityChanged(tab)
+            if (active === tab) host?.onActiveTabChanged(tab)
+        }
+
+        override fun onPageFinished(view: WebView, url: String) {
+            if (tab.webView !== view) return
+            tab.url = url
+            view.title?.trim()?.takeIf { it.isNotEmpty() }?.let { tab.title = it }
+            updateNavigationState(tab)
+            if (!tab.private && url.startsWith("http", ignoreCase = true)) {
+                host?.activeContext()?.let { context ->
+                    background { DataStore.get(context).recordVisit(url, tab.title) }
+                }
+            }
+            host?.onProgress(tab, 100)
+            host?.onPageFinished(tab, true)
+            if (active === tab) host?.onActiveTabChanged(tab)
+            captureThumbnail(tab)
+        }
+
+        override fun onReceivedError(
+            view: WebView,
+            request: WebResourceRequest,
+            error: android.webkit.WebResourceError
+        ) {
+            if (tab.webView === view && request.isForMainFrame) {
+                host?.onPageFinished(tab, false)
+                updateNavigationState(tab)
+                if (active === tab) host?.onActiveTabChanged(tab)
+            }
+        }
+
+        override fun shouldInterceptRequest(
+            view: WebView,
+            request: WebResourceRequest
+        ): WebResourceResponse? {
+            // Never block the page the person deliberately opened. Only subresources
+            // pass through the small local block list.
+            if (request.isForMainFrame) return null
+            return when (AdBlocker.check(request.url.toString())) {
+                AdBlocker.Verdict.BLOCK_AD -> {
+                    reportBlocked(tab, "ad", request.url.toString())
+                    emptyResponse()
+                }
+                AdBlocker.Verdict.BLOCK_TRACKER -> {
+                    reportBlocked(tab, "tracker", request.url.toString())
+                    emptyResponse()
+                }
+                AdBlocker.Verdict.ALLOW -> null
+            }
+        }
+
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            // Returning true is vital: it tells Android the app handled a WebView
+            // renderer death, preventing the Activity itself from being killed.
+            recoverRenderer(tab, view)
+            return true
+        }
+
+        private fun handleNavigation(view: WebView, rawUrl: String): Boolean {
+            val scheme = runCatching { Uri.parse(rawUrl).scheme?.lowercase() }.getOrNull()
+            if (scheme == "http" || scheme == "https") {
+                if (Prefs.httpsOnly && scheme == "http") {
+                    val secure = upgradeToHttps(rawUrl)
+                    if (secure != rawUrl) view.loadUrl(secure)
+                    return true
+                }
+                return false
+            }
+            // about:, data:, blob:, and javascript: are browser-internal URLs.
+            if (scheme in setOf("about", "data", "blob", "javascript")) return false
+            // mailto:, tel:, geo:, intent:, and market: go to an installed Android app.
+            host?.activeContext()?.let { External.openUri(it, rawUrl) }
+            return true
+        }
+    }
+
+    private class BrowserChrome(private val tab: Tab) : WebChromeClient() {
+        override fun onProgressChanged(view: WebView, progress: Int) {
+            if (tab.webView === view) host?.onProgress(tab, progress.coerceIn(0, 100))
+        }
+
+        override fun onReceivedTitle(view: WebView, title: String?) {
+            if (tab.webView !== view) return
+            title?.trim()?.takeIf { it.isNotEmpty() }?.let { tab.title = it }
+            if (active === tab) host?.onActiveTabChanged(tab)
+            host?.onTabsChanged()
+        }
+    }
+
+    private fun emptyResponse(): WebResourceResponse =
+        WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
 }

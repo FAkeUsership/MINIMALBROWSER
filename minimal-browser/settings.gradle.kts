@@ -11,8 +11,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Mozilla GeckoView is published here.
-        maven { url = uri("https://maven.mozilla.org/maven2") }
     }
 }
 

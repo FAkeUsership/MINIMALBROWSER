@@ -19,7 +19,7 @@ object Backup {
             try {
                 val db = DataStore.get(context)
                 val root = JSONObject()
-                root.put("app", "Minimal")
+                root.put("app", "Minimal Browser")
                 root.put("version", 1)
                 root.put("exportedAt", System.currentTimeMillis())
 
@@ -47,10 +47,10 @@ object Backup {
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(root.toString(2).toByteArray())
                 }
-                notify("Exported ${bookmarks.length()} bookmarks, ${history.length()} history entries")
+                notifyOnMain(notify, "Exported ${bookmarks.length()} bookmarks, ${history.length()} history entries")
             } catch (e: Exception) {
                 Log.w(TAG, "export failed: ${e.message}")
-                notify("Export failed")
+                notifyOnMain(notify, "Export failed")
             }
         }.start()
     }
@@ -60,7 +60,7 @@ object Backup {
             try {
                 val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
                 if (text.isNullOrEmpty()) {
-                    notify("Nothing to import")
+                    notifyOnMain(notify, "Nothing to import")
                     return@Thread
                 }
                 val root = JSONObject(text)
@@ -88,11 +88,16 @@ object Backup {
                         }
                     }
                 }
-                notify("Imported $bookmarks bookmarks, $history history entries")
+                notifyOnMain(notify, "Imported $bookmarks bookmarks, $history history entries")
             } catch (e: Exception) {
                 Log.w(TAG, "import failed: ${e.message}")
-                notify("Import failed — is that a Minimal backup?")
+                notifyOnMain(notify, "Import failed — is that a Minimal backup?")
             }
         }.start()
+    }
+
+    /** Backup work runs off the UI thread; view callbacks must not. */
+    private fun notifyOnMain(notify: (String) -> Unit, message: String) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post { notify(message) }
     }
 }

@@ -11,10 +11,10 @@ android {
 
     defaultConfig {
         applicationId = "com.minimal.browser"
-        minSdk = 26          // GeckoView declares minSdkVersion 26
+        minSdk = 26          // Android 8.0+; covers modern System WebView APIs
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.1.0"
     }
 
     buildTypes {
@@ -36,30 +36,6 @@ android {
         buildConfig = true
     }
 
-    /**
-     * GeckoView carries native code for three ABIs (~150 MB each), so the
-     * universal APK is ~530 MB. Splitting also emits one APK per ABI
-     * (~160–220 MB) — install `arm64-v8a` on essentially any modern tablet.
-     * CI has the RAM for this; a 1 GB machine may not.
-     */
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true
-        }
-    }
-
-    // Gecko loads several companion libraries (not only libmozglue). Force the
-    // installer to extract them to nativeLibraryDir instead of relying on direct
-    // APK-mapped loading, which is the Android 14+ crash path we are avoiding.
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-        }
-    }
-
     lint {
         abortOnError = false
     }
@@ -75,9 +51,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
 
-    // ---- Mozilla GeckoView engine (open source, prebuilt, MPL 2.0) ----
-    implementation("org.mozilla.geckoview:geckoview:153.0.20260810162159")
 }

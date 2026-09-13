@@ -25,17 +25,42 @@ object External {
         }
     }
 
-    /** @return true when some other app took the URI. */
-    fun openUri(context: Context, uri: String): Boolean {
-        if (uri.isBlank()) return false
+    /**
+     * Opens a non-web URI in a matching Android app. `intent:` links need
+     * Intent.parseUri rather than ACTION_VIEW alone; if their target is absent,
+     * Android's documented browser_fallback_url is opened instead.
+     *
+     * @return true when an activity or a safe fallback took the URI.
+     */
+    fun openUri(context: Context, rawUri: String): Boolean {
+        if (rawUri.isBlank()) return false
         return try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
+            val intent = if (rawUri.startsWith("intent:", ignoreCase = true)) {
+                Intent.parseUri(rawUri, Intent.URI_INTENT_SCHEME)
+            } else {
+                Intent(Intent.ACTION_VIEW, Uri.parse(rawUri))
+            }.apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(intent)
-            true
+
+            if (intent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(intent)
+                true
+            } else {
+                val fallback = intent.getStringExtra("browser_fallback_url")
+                if (fallback.isNullOrBlank() || !fallback.startsWith("http", ignoreCase = true)) {
+                    false
+                } else {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(fallback)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                    )
+                    true
+                }
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "nothing handles $uri (${e.message})")
+            Log.w(TAG, "nothing handles $rawUri (${e.message})")
             false
         }
     }

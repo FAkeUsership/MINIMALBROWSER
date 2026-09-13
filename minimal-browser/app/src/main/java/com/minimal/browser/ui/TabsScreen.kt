@@ -11,7 +11,6 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -20,7 +19,7 @@ import com.minimal.browser.Tab
 
 /**
  * `#s-tabs` — "Open tabs" grid. Three columns of cards, each with a real
- * thumbnail (captured from Gecko), the favicon letter, title and host, an ✕ to
+ * thumbnail (captured from the active page), the favicon letter, title and host, an ✕ to
  * close, plus the dashed "New tab" tile.
  */
 class TabsScreen(context: Context) : LinearLayout(context) {

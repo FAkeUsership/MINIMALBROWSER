@@ -58,6 +58,9 @@ object SearchEngines {
  */
 object UrlBar {
 
+    /** Covers mailto:, tel:, geo:, intent:, about:, data:, and normal http(s). */
+    private val EXPLICIT_SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:")
+
     private val URLISH = Regex(
         "^([a-zA-Z][a-zA-Z0-9+.-]*://)|" +                    // explicit scheme
         "^localhost(:\\d+)?(/.*)?$|" +
@@ -68,15 +71,15 @@ object UrlBar {
     fun isUrl(input: String): Boolean {
         val s = input.trim()
         if (s.isEmpty()) return false
-        if (s.startsWith("about:", true) || s.startsWith("data:", true)) return true
+        if (EXPLICIT_SCHEME.containsMatchIn(s)) return true
         return URLISH.matches(s) && !s.contains(' ')
     }
 
-    /** https-first: bare hosts get https:// (the "Upgrade to HTTPS" default). */
+    /** https-first: bare hosts get https://, while every explicit scheme stays intact. */
     fun normalize(input: String): String {
         val s = input.trim()
         if (s.isEmpty()) return s
-        return if ("://" in s) s else "https://$s"
+        return if (EXPLICIT_SCHEME.containsMatchIn(s)) s else "https://$s"
     }
 
     /** Resolve the address-bar input into a URL to load. */

@@ -12,8 +12,8 @@ import java.util.Locale
  * Records uncaught exceptions to `filesDir/crash.txt` and shows the first line as a
  * toast, so a crash on a device with no cable attached is still readable.
  *
- * The full trace is kept in the file: Settings → About → "Share recent crash log",
- * or `adb pull /data/data/com.minimal.browser/files/crash.txt`.
+ * The full trace remains in the app file and can be retrieved with
+ * `adb pull /data/data/com.minimal.browser/files/crash.txt` when debugging.
  */
 object CrashReporter {
 

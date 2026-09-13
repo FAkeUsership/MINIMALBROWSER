@@ -1,7 +1,6 @@
 name: Build Minimal Browser
 
-# A v* tag builds the APKs on GitHub and publishes them to that Release.
-# The manual option is useful when the Actions page is more convenient than git.
+# A v* tag builds the Android APK on GitHub and publishes it to that Release.
 on:
   push:
     tags:
@@ -9,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.0.4)'
+        description: 'Release tag to create or update (for example: v1.1.0)'
         required: true
-        default: 'v1.0.4'
+        default: 'v1.1.0'
         type: string
 
 permissions:
@@ -23,7 +22,7 @@ concurrency:
 
 jobs:
   minimal-browser:
-    name: Minimal Browser (GeckoView)
+    name: Minimal Browser (Android System WebView)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,8 +35,6 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # setup-android provides sdkmanager and accepts the licences. Install the
-      # exact compile SDK rather than relying on the hosted-image defaults.
       - name: Install Android API 36
         run: |
           set -euo pipefail
@@ -47,9 +44,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Keep the Android SDK. The old workflow deleted /usr/local/lib/android
-      # here, even though ANDROID_HOME points there; Gradle then had no SDK and
-      # every build failed before Kotlin compilation.
+      # Deliberately retain the Android SDK. The original broken workflow deleted
+      # its own SDK before Gradle ran.
       - name: Free non-Android disk headroom
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL || true
@@ -60,33 +56,27 @@ jobs:
         working-directory: minimal-browser
         run: ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Verify APKs
+      - name: Verify APK
         run: |
           set -euo pipefail
-          cd minimal-browser/app/build/outputs/apk/debug
-          ls -lh
+          APK=minimal-browser/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
           AAPT2="$ANDROID_HOME/build-tools/36.0.0/aapt2"
-          for apk in *.apk; do
-            echo "--- $apk ---"
-            "$AAPT2" dump badging "$apk" | grep -E '^package|screenOrientation|sdkVersion|native-code'
-            # Prove the generated APK, not merely the source manifest, asks the
-            # installer to extract GeckoView's native libraries.
-            "$AAPT2" dump xmltree "$apk" --file AndroidManifest.xml | \
-              grep -Eq 'extractNativeLibs.*(0xffffffff|true)'
-          done
+          "$AAPT2" dump badging "$APK" | tee /tmp/minimal-browser-badging.txt
+          grep -Eq "^package: name='com\.minimal\.browser'" /tmp/minimal-browser-badging.txt
+          # A System WebView build must not accidentally carry the retired native engine.
+          ! unzip -l "$APK" | grep -Eq 'lib/(arm64-v8a|armeabi-v7a|x86_64)/libxul\.so'
+          ls -lh "$APK"
 
       - name: Prepare release files
         run: |
           set -euo pipefail
-          src=minimal-browser/app/build/outputs/apk/debug
           mkdir -p release
-          cp "$src/app-arm64-v8a-debug.apk" release/MinimalBrowser-arm64-v8a-debug.apk
-          cp "$src/app-armeabi-v7a-debug.apk" release/MinimalBrowser-armeabi-v7a-debug.apk
-          cp "$src/app-x86_64-debug.apk" release/MinimalBrowser-x86_64-debug.apk
-          cp "$src/app-universal-debug.apk" release/MinimalBrowser-universal-debug.apk
+          cp minimal-browser/app/build/outputs/apk/debug/app-debug.apk \
+            release/MinimalBrowser-android-debug.apk
           (
             cd release
-            sha256sum MinimalBrowser-*-debug.apk > SHA256SUMS.txt
+            sha256sum MinimalBrowser-android-debug.apk > SHA256SUMS.txt
           )
           ls -lh release
           cat release/SHA256SUMS.txt
@@ -101,7 +91,7 @@ jobs:
             v*) ;;
             *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
           esac
-          NOTES="Minimal Browser $TAG. Includes GeckoView session-start ordering, visible-renderer lifecycle, and Android native-library extraction repairs. SHA256SUMS.txt verifies the published APKs. Debug-signed APKs: install the arm64-v8a APK on almost all modern Android phones and tablets. The universal APK supports every bundled ABI but is much larger. App ID: com.minimal.browser. Page-only mode: hold Web for 5 seconds; Android Back or a double tap restores controls."
+          NOTES="Minimal Browser $TAG replaces the crashing bundled native engine with Android System WebView. Web, Tabs, page-only mode, YouTube, Mail links, downloads, and Android Back run through the stable platform browser renderer. SHA256SUMS.txt verifies the published APK. App ID: com.minimal.browser."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else

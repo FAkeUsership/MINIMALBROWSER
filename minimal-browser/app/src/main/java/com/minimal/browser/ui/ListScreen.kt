@@ -1,7 +1,6 @@
 package com.minimal.browser.ui
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.Typeface
 import android.util.TypedValue
 import android.view.Gravity
@@ -80,14 +79,16 @@ class ListScreen(context: Context) : LinearLayout(context) {
         bookmarksMode = false
         heading.text = "History"
         Thread {
-            val rows = DataStore.get(context).history(300).map {
-                Item(
-                    title = it.title.ifEmpty { it.url },
-                    subtitle = it.url,
-                    trailing = "${it.visits}× · ${Fmt.when_ago(it.lastVisit)}",
-                    url = it.url
-                )
-            }
+            val rows = runCatching {
+                DataStore.get(context).history(300).map {
+                    Item(
+                        title = it.title.ifEmpty { it.url },
+                        subtitle = it.url,
+                        trailing = "${it.visits}× · ${Fmt.when_ago(it.lastVisit)}",
+                        url = it.url
+                    )
+                }
+            }.getOrElse { emptyList() }
             post { submit("History", "${rows.size} pages · most recent first", rows) }
         }.start()
     }
@@ -96,14 +97,16 @@ class ListScreen(context: Context) : LinearLayout(context) {
         bookmarksMode = true
         heading.text = "Bookmarks"
         Thread {
-            val rows = DataStore.get(context).bookmarks().map {
-                Item(
-                    title = it.title.ifEmpty { it.url },
-                    subtitle = it.url,
-                    trailing = "✕",
-                    url = it.url
-                )
-            }
+            val rows = runCatching {
+                DataStore.get(context).bookmarks().map {
+                    Item(
+                        title = it.title.ifEmpty { it.url },
+                        subtitle = it.url,
+                        trailing = "✕",
+                        url = it.url
+                    )
+                }
+            }.getOrElse { emptyList() }
             post { submit("Bookmarks", "${rows.size} saved pages", rows) }
         }.start()
     }
@@ -112,13 +115,15 @@ class ListScreen(context: Context) : LinearLayout(context) {
         bookmarksMode = false
         heading.text = "Downloads"
         Thread {
-            val rows = DataStore.get(context).downloads().map {
-                Item(
-                    title = it.fileName,
-                    subtitle = it.url,
-                    trailing = "${Fmt.bytes(it.bytes)} · ${Fmt.when_ago(it.createdAt)}"
-                )
-            }
+            val rows = runCatching {
+                DataStore.get(context).downloads().map {
+                    Item(
+                        title = it.fileName,
+                        subtitle = it.url,
+                        trailing = "${Fmt.bytes(it.bytes)} · ${Fmt.when_ago(it.createdAt)}"
+                    )
+                }
+            }.getOrElse { emptyList() }
             post { submit("Downloads", "${rows.size} files · saved to your Downloads folder", rows) }
         }.start()
     }
@@ -196,9 +201,13 @@ class ListScreen(context: Context) : LinearLayout(context) {
             row.findViewWithTag<TextView>("r").text = item.trailing ?: ""
             row.setOnClickListener {
                 if (bookmarksMode && item.url != null) {
-                    Thread { DataStore.get(context).removeBookmark(item.url) }.start()
-                    onDeleteBookmark?.invoke(item.url)
-                    showBookmarks()
+                    Thread {
+                        runCatching { DataStore.get(context).removeBookmark(item.url) }
+                        post {
+                            onDeleteBookmark?.invoke(item.url)
+                            showBookmarks()
+                        }
+                    }.start()
                 } else if (item.url != null) {
                     onOpenUrl?.invoke(item.url)
                 }

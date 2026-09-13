@@ -9,6 +9,7 @@ import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -18,7 +19,7 @@ import android.widget.TextView
 import com.minimal.browser.R
 import com.minimal.browser.Tab
 import com.minimal.browser.UrlBar
-import org.mozilla.geckoview.GeckoView
+import android.webkit.WebView
 
 /**
  * `#s-web` — the browser screen.
@@ -50,7 +51,7 @@ class WebScreen(context: Context) : LinearLayout(context) {
     val progressTrack: FrameLayout
     private val progressFill: View
     val container: FrameLayout
-    val geckoView: GeckoView
+    private var attachedWebView: WebView? = null
     val blockedBanner: TextView
 
     private val btnBack: ImageView
@@ -162,16 +163,10 @@ class WebScreen(context: Context) : LinearLayout(context) {
 
         /* ---------------- page + overlays ---------------- */
         container = FrameLayout(context).apply { setBackgroundColor(Ink.SHELL) }
-        geckoView = GeckoView(context)
-        // The page remains fully interactive. In page-only mode this only observes
-        // a double tap and lets GeckoView continue to receive every touch event.
-        geckoView.setOnTouchListener { _, event ->
-            if (pageOnly) pageGestureDetector.onTouchEvent(event)
-            false
-        }
-        container.addView(geckoView, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
-        ))
+
+        // The active Android System WebView is attached here by attachWebView().
+        // Keeping the surface empty until a real tab exists avoids all hidden
+        // browser-renderer startup work on Home and Tabs.
 
         // .blocked — the floating "3 ads & 1 tracker blocked" pill
         blockedBanner = TextView(context).apply {
@@ -327,8 +322,8 @@ class WebScreen(context: Context) : LinearLayout(context) {
     }
 
     /**
-     * Page-only mode leaves GeckoView as the sole visible view: no address bar,
-     * divider, loading line, blocked badge, or floating control remains.
+     * Page-only mode leaves the active web page as the sole visible view: no
+     * address bar, divider, loading line, blocked badge, or floating control.
      */
     fun setFullScreen(on: Boolean) {
         pageOnly = on
@@ -339,6 +334,35 @@ class WebScreen(context: Context) : LinearLayout(context) {
             blockedBanner.visibility = GONE
             cancelEditing()
         }
+    }
+
+    /** Places only the active tab's WebView under the browser overlays. */
+    fun attachWebView(webView: WebView?) {
+        if (attachedWebView === webView) return
+        attachedWebView?.let { old ->
+            if (old.parent === container) container.removeView(old)
+        }
+        attachedWebView = webView
+        if (webView == null) return
+
+        // A WebView can only have one parent. This also makes renderer recovery
+        // safe when Android hands TabManager a replacement WebView instance.
+        (webView.parent as? ViewGroup)?.removeView(webView)
+        webView.setOnTouchListener { _, event ->
+            if (pageOnly) pageGestureDetector.onTouchEvent(event)
+            false // observe the double tap; never consume normal page gestures
+        }
+        container.addView(webView, 0, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+    }
+
+    /** Detach, but do not destroy, the current tab while another app screen is shown. */
+    fun detachWebView() {
+        attachedWebView?.let { view ->
+            if (view.parent === container) container.removeView(view)
+        }
+        attachedWebView = null
     }
 
     /* ------------------------------------------------------------------ */
