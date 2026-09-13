@@ -13,8 +13,8 @@ android {
         applicationId = "com.minimal.browser"
         minSdk = 26          // GeckoView declares minSdkVersion 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
     }
 
     buildTypes {
@@ -48,6 +48,15 @@ android {
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = true
+        }
+    }
+
+    // Gecko loads several companion libraries (not only libmozglue). Force the
+    // installer to extract them to nativeLibraryDir instead of relying on direct
+    // APK-mapped loading, which is the Android 14+ crash path we are avoiding.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 

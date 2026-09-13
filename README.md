@@ -4,11 +4,11 @@
 
 ## Get an APK
 
-Push a version tag such as `v1.0.3`. GitHub Actions builds the APKs and publishes a GitHub Release automatically:
+Push a version tag such as `v1.0.4`. GitHub Actions builds the APKs and publishes a GitHub Release automatically:
 
 ```bash
-git tag v1.0.3
-git push origin v1.0.3
+git tag v1.0.4
+git push origin v1.0.4
 ```
 
 Download the matching asset from **Releases**:
@@ -17,12 +17,13 @@ Download the matching asset from **Releases**:
 - `MinimalBrowser-armeabi-v7a-debug.apk` — older 32-bit ARM devices.
 - `MinimalBrowser-x86_64-debug.apk` — x86_64 emulators.
 - `MinimalBrowser-universal-debug.apk` — all bundled ABIs; much larger.
+- `SHA256SUMS.txt` — SHA-256 hashes for exact download verification.
 
 These are debug-signed builds. The application ID is `com.minimal.browser` and each release increments the version code, so newer builds install over prior Minimal Browser builds.
 
-## Android 14+ browser-start repair (v1.0.3)
+## Android 14+ browser-start repair (v1.0.4)
 
-`v1.0.3` changes the GeckoView lifecycle to install the session `ContentDelegate` before opening the session (the ordering required by GeckoView’s Bug 1758212 workaround), then attaches GeckoView only to the visible Web surface. It also contains session-start failures so the Minimal Browser shell remains open rather than crashing.
+`v1.0.4` changes the GeckoView lifecycle to install the session `ContentDelegate` before opening the session (the ordering required by GeckoView’s Bug 1758212 workaround), then attaches GeckoView only to the visible Web surface. Crucially, it also forces Android to extract GeckoView’s native libraries at installation time rather than loading them directly from the APK—avoiding the known Gecko native-loader failure path. `SHA256SUMS.txt` on the release lets downloads be verified exactly.
 
 ## Page-only full screen
 

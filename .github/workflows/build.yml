@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.0.3)'
+        description: 'Release tag to create or update (for example: v1.0.4)'
         required: true
-        default: 'v1.0.3'
+        default: 'v1.0.4'
         type: string
 
 permissions:
@@ -69,6 +69,10 @@ jobs:
           for apk in *.apk; do
             echo "--- $apk ---"
             "$AAPT2" dump badging "$apk" | grep -E '^package|screenOrientation|sdkVersion|native-code'
+            # Prove the generated APK, not merely the source manifest, asks the
+            # installer to extract GeckoView's native libraries.
+            "$AAPT2" dump xmltree "$apk" --file AndroidManifest.xml | \
+              grep -Eq 'extractNativeLibs.*(0xffffffff|true)'
           done
 
       - name: Prepare release files
@@ -80,7 +84,12 @@ jobs:
           cp "$src/app-armeabi-v7a-debug.apk" release/MinimalBrowser-armeabi-v7a-debug.apk
           cp "$src/app-x86_64-debug.apk" release/MinimalBrowser-x86_64-debug.apk
           cp "$src/app-universal-debug.apk" release/MinimalBrowser-universal-debug.apk
+          (
+            cd release
+            sha256sum MinimalBrowser-*-debug.apk > SHA256SUMS.txt
+          )
           ls -lh release
+          cat release/SHA256SUMS.txt
 
       - name: Publish GitHub Release
         env:
@@ -92,7 +101,7 @@ jobs:
             v*) ;;
             *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
           esac
-          NOTES="Minimal Browser $TAG. Includes the GeckoView session-start ordering and visible-renderer lifecycle repair for Android 14+. Debug-signed APKs: install the arm64-v8a APK on almost all modern Android phones and tablets. The universal APK supports every bundled ABI but is much larger. App ID: com.minimal.browser. Page-only mode: hold Web for 5 seconds; Android Back or a double tap restores controls."
+          NOTES="Minimal Browser $TAG. Includes GeckoView session-start ordering, visible-renderer lifecycle, and Android native-library extraction repairs. SHA256SUMS.txt verifies the published APKs. Debug-signed APKs: install the arm64-v8a APK on almost all modern Android phones and tablets. The universal APK supports every bundled ABI but is much larger. App ID: com.minimal.browser. Page-only mode: hold Web for 5 seconds; Android Back or a double tap restores controls."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else
