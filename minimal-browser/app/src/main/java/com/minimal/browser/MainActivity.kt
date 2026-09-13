@@ -267,6 +267,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                 }
                 KeyEvent.KEYCODE_F -> {
                     if (TabManager.active == null) return false
+                    leaveFullScreenIfNeeded()
                     onFindInPage()
                     return true
                 }
@@ -361,6 +362,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     private fun closeActiveTabFromKeyboard(): Boolean {
         val tab = TabManager.active ?: return false
+        leaveFullScreenIfNeeded()
         TabManager.close(tab)
         if (TabManager.tabs.isEmpty()) show(Screen.HOME) else show(Screen.WEB)
         return true
