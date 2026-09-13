@@ -567,13 +567,14 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                     webScreen.observePageTouch(event)
                     return super.dispatchTouchEvent(event)
                 }
-            }.apply {
-                // GeckoView documents SurfaceView as its best-performance backend.
-                // Browser chrome is outside this surface, and the in-container
-                // banner stays a normal sibling overlay, so this avoids the extra
-                // TextureView copy/composition cost without sacrificing controls.
-                setViewBackend(GeckoView.BACKEND_SURFACE_VIEW)
-            }.also { geckoView = it }
+            }.also {
+                // GeckoView 153 constructs a SurfaceView by default and wires its
+                // SurfaceHolder listener during construction. Keep that initialized
+                // default for the documented high-performance backend. Explicitly
+                // resetting BACKEND_SURFACE_VIEW here recreates the surface after
+                // the listener was registered and can leave the compositor black.
+                geckoView = it
+            }
         } catch (error: Throwable) {
             Log.e("MinimalBrowser", "Unable to create GeckoView", error)
             toast.say(getString(R.string.t_engine_session_failed))

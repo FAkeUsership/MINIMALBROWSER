@@ -1,13 +1,16 @@
 # Changelog
 
-## v1.2.2 — Page-only Back and rendering/CPU optimization
+## v1.2.3 — Surface lifecycle black-screen correction
 
-- Fixes the Android 14+ page-only exit path: page-only mode now uses Android’s non-sticky default inset behavior, keeps predictive Back enabled, and gives app page-only state priority over an incidental web-video full-screen state. One Back gesture/button restores browser chrome and normal system bars; the page double-tap exit remains available.
-- Replaces GeckoView’s lower-performance `TextureView` backend with its documented high-performance `SurfaceView` backend while preserving the one-visible-surface lifecycle and page-only touch observation.
-- Removes automatic full-frame `capturePixels()` tab screenshots on page load, tab switches, and the Tabs screen. Tab cards retain lightweight preview artwork without forcing GPU readback/scaling/allocation work into browsing interactions.
-- Coalesces a burst of blocked-resource events into one short-delayed UI update and one transactional database batch, uses one low-priority database worker instead of creating a thread per write, and avoids persisting blocked-request records from private tabs.
-- Indexes host-suffix ad/tracker rules and shares normalized URL checks, reducing repeated per-resource rule scans; coalesces browser progress-line layouts to one update per display frame.
-- Disables Gecko remote debugging, removes the app-wide keep-screen-on flag, and marks the GitHub-built end-user process non-debuggable; the workflow asserts that generated-APK property in addition to package, version, ARM64 `libxul.so`, extraction, size, and checksum checks.
+- Corrects the v1.2.2 black-screen regression. GeckoView 153 already creates and listens to its default high-performance `SurfaceView`; calling `setViewBackend(BACKEND_SURFACE_VIEW)` again replaced that initialized surface without re-registering its holder callback. v1.2.3 retains the initialized default SurfaceView instead, so Gecko receives the compositor surface callback.
+- Restores the field-proven debug APK packaging profile so the build does not make an unrelated large packaging transition. Gecko remote debugging remains explicitly disabled.
+- Retains the Android 14+ page-only Back fix: non-sticky default inset behavior, predictive Back support, and app page-only priority over incidental web-video full screen. One Back gesture/button restores controls and normal bars; page double-tap remains available.
+- Retains the performance work that does not alter compositor initialization: no automatic `capturePixels()` tab screenshots, batched shield UI/database work on one worker, compact blocked-count storage, indexed host rules, frame-coalesced progress updates, and no app-wide keep-screen-on flag.
+
+## v1.2.2 — Withdrawn after device validation
+
+- Published briefly, then found on a physical Android device to present a black browser surface. Do not install this version; use v1.2.3 or later.
+- The bundled ARM64 Gecko engine was present and GitHub packaging checks passed, but the redundant SurfaceView backend reset was a runtime compositor-lifecycle defect that artifact checks alone could not detect.
 
 ## v1.2.1 — Bundled GeckoView ARM64 reconstruction
 

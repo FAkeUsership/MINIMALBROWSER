@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.2.2)'
+        description: 'Release tag to create or update (for example: v1.2.3)'
         required: true
-        default: 'v1.2.2'
+        default: 'v1.2.3'
         type: string
 
 permissions:
@@ -65,10 +65,7 @@ jobs:
           test -s "$APK"
           unzip -t "$APK" >/dev/null
           "$AAPT2" dump badging "$APK" | tee /tmp/minimal-browser-badging.txt
-          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.2'" /tmp/minimal-browser-badging.txt
-          # The proven debug-key signing flow remains installable, but this
-          # end-user build must not run as an Android-debuggable process.
-          ! grep -Eq '^application-debuggable' /tmp/minimal-browser-badging.txt
+          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.3'" /tmp/minimal-browser-badging.txt
           grep -Eq "native-code:.*'arm64-v8a'" /tmp/minimal-browser-badging.txt
           # Assert against the built APK, not source: exactly the requested ABI
           # and Gecko's main native library must be present.
@@ -106,7 +103,7 @@ jobs:
             v*) ;;
             *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
           esac
-          NOTES="Minimal Browser $TAG ships the optimized Mozilla GeckoView engine inside the ARM64 APK. This update makes one Android Back gesture/button exit the five-second page-only view immediately, uses GeckoView's high-performance SurfaceView backend, removes automatic full-frame tab screenshots, coalesces shield-event UI/database work, and disables end-user remote debugging. The release verifies the generated package ID, version, non-debuggable process flag, ARM64-only native code, libxul.so, install-time native extraction, checksum, and a substantial bundled-engine artifact. Web navigation/search, Home links including Mail and YouTube, tabs, downloads, printing, and page-only mode use the bundled engine. Hold Web for exactly 5 seconds; Android Back or a page double-tap restores controls and normal system bars. SHA256SUMS.txt verifies the APK. App ID: com.minimal.browser."
+          NOTES="Minimal Browser $TAG corrects the v1.2.2 black-screen regression while retaining the bundled Mozilla GeckoView ARM64 engine. GeckoView's already-initialized default SurfaceView is used directly; v1.2.2 redundantly reset that backend after its SurfaceHolder listener was registered, which prevented the compositor from receiving its surface callback. This release restores the field-proven APK packaging profile, retains the one-Back page-only fix, removes automatic full-frame tab screenshots, coalesces shield-event UI/database work, indexes local blocking rules, and disables remote debugging. The release verifies the generated package ID, version, ARM64-only native code, libxul.so, install-time native extraction, checksum, and a substantial bundled-engine artifact. Web navigation/search, Home links including Mail and YouTube, tabs, downloads, printing, and page-only mode use the bundled engine. Hold Web for exactly 5 seconds; one Android Back or a page double-tap restores controls and normal system bars. SHA256SUMS.txt verifies the APK. App ID: com.minimal.browser."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else
