@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -313,9 +314,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             toast.say(getString(R.string.t_tab_closed))
         }
         tabsScreen.onNewTab = {
-            newTab()
-            toast.say(getString(R.string.t_new_tab))
-            show(Screen.HOME)
+            if (newTab()) toast.say(getString(R.string.t_new_tab))
         }
 
         /* ---- lists ---- */
@@ -330,6 +329,11 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private fun show(screen: Screen) {
         if (screen != Screen.LIST) previousScreen = current
         current = screen
+
+        // A GeckoView compositor should only own a visible Web surface. Releasing
+        // it before Home/Tabs/Settings avoids attaching a native renderer to a GONE
+        // view, an especially fragile path on Android 14+.
+        if (screen != Screen.WEB) TabManager.detach()
 
         homeScreen.visibility = if (screen == Screen.HOME) View.VISIBLE else View.GONE
         webScreen.visibility = if (screen == Screen.WEB) View.VISIBLE else View.GONE
@@ -349,11 +353,12 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                 rail.setActive(rail.web)
                 topTitle.text = "Web"
                 var tab = TabManager.active
-                // Attach immediately; waiting for onResume used to leave a blank
-                // GeckoView when Web was selected after launch or Settings.
                 if (BrowserApp.engineReady) {
-                    TabManager.attach(webScreen.geckoView)
-                    if (tab == null) tab = TabManager.newTab(null)
+                    // The safe order is: configure delegates -> open session -> attach
+                    // the visible GeckoView. In particular, do not open a session with
+                    // an unset ContentDelegate (GeckoView Bug 1758212 workaround).
+                    if (tab == null) tab = openNewTabSafely()
+                    if (tab != null) TabManager.attach(webScreen.geckoView)
                 } else {
                     explainEngineUnavailable()
                 }
@@ -439,6 +444,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /** Enter page-only mode after the Web rail button has been held for 5 seconds. */
     private fun enterPageOnly() {
         if (fullScreen) return
+        // Do not hide every control around a failed engine start. Establish a
+        // usable tab first, then enter the intentionally chrome-free page view.
+        if (!engineReady()) return
+        if (TabManager.active == null && openNewTabSafely() == null) return
         fullScreen = true
         drawer.closeImmediately()
         webScreen.cancelEditing()
@@ -507,6 +516,36 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             ?: getString(R.string.t_engine_failed_generic))
     }
 
+    /**
+     * Native session startup is the point that previously took down the Activity.
+     * Keep the failure in this one boundary so a bad/old device state leaves the
+     * browser shell usable instead of crashing the process.
+     */
+    private fun openNewTabSafely(url: String? = null, privateTab: Boolean = false): Tab? {
+        if (!BrowserApp.engineReady) {
+            explainEngineUnavailable()
+            return null
+        }
+        return try {
+            TabManager.newTab(url, private = privateTab)
+        } catch (e: Throwable) {
+            Log.e("MinimalBrowser", "Unable to open GeckoSession", e)
+            toast.say(getString(R.string.t_engine_session_failed))
+            null
+        }
+    }
+
+    private fun loadActiveSafely(url: String): Boolean {
+        return try {
+            TabManager.loadInActive(url)
+            true
+        } catch (e: Throwable) {
+            Log.e("MinimalBrowser", "Unable to load URL in GeckoSession", e)
+            toast.say(getString(R.string.t_engine_session_failed))
+            false
+        }
+    }
+
     /* ================================================================== */
     /*  navigation                                                         */
     /* ================================================================== */
@@ -526,27 +565,30 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         if (!engineReady()) return
         val resolved = if (url.startsWith("http")) url else UrlBar.resolve(url)
         if (resolved.isEmpty()) return
-        if (TabManager.active == null) TabManager.newTab(resolved)
-        else TabManager.loadInActive(resolved)
+        if (TabManager.active == null) {
+            if (openNewTabSafely(resolved) == null) return
+        } else if (!loadActiveSafely(resolved)) {
+            return
+        }
         show(Screen.WEB)
     }
 
-    private fun newTab() {
-        if (!engineReady()) return
+    /** @return true only when a real session was opened. */
+    private fun newTab(): Boolean {
+        if (!engineReady()) return false
         val target = when (Prefs.homepageMode) {
             HomePageModes.BLANK -> "about:blank"
             HomePageModes.CUSTOM -> Prefs.customHomeUrl.ifBlank { "about:blank" }
             else -> null
         }
-        val tab = TabManager.newTab(target)
-        TabManager.switchTo(tab)
+        if (openNewTabSafely(target) == null) return false
         show(Screen.HOME)
+        return true
     }
 
     private fun newPrivateTab() {
         if (!engineReady()) return
-        val tab = TabManager.newTab(null, private = true)
-        TabManager.switchTo(tab)
+        if (openNewTabSafely(null, privateTab = true) == null) return
         toast.say("Private tab — nothing will be recorded")
         show(Screen.WEB)
     }
@@ -560,16 +602,8 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         val uri = intent.dataString
         val query = intent.getStringExtra("query")
         when {
-            !uri.isNullOrEmpty() && uri.startsWith("http") -> {
-                TabManager.newTab(uri)
-                show(Screen.WEB)
-            }
-
-            !query.isNullOrBlank() -> {
-                TabManager.newTab(UrlBar.resolve(query))
-                show(Screen.WEB)
-            }
-
+            !uri.isNullOrEmpty() && uri.startsWith("http") -> openUrl(uri)
+            !query.isNullOrBlank() -> openUrl(UrlBar.resolve(query))
             else -> bootstrap()
         }
     }
@@ -579,11 +613,17 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             show(Screen.HOME)
             return
         }
-        val restored = TabManager.restore(this)
+        val restored = try {
+            TabManager.restore(this)
+        } catch (e: Throwable) {
+            Log.e("MinimalBrowser", "Could not restore GeckoSession", e)
+            toast.say(getString(R.string.t_engine_session_failed))
+            false
+        }
         if (restored) {
             TabManager.tabs.firstOrNull()?.let { TabManager.switchTo(it) }
         } else {
-            TabManager.newTab(null)
+            openNewTabSafely()
         }
         show(Screen.HOME)
     }
@@ -667,8 +707,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /* ================================================================== */
 
     override fun onNewTab() {
-        newTab()
-        toast.say(getString(R.string.t_new_tab))
+        if (newTab()) toast.say(getString(R.string.t_new_tab))
     }
 
     override fun onNewPrivateTab() = newPrivateTab()
@@ -845,7 +884,9 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     override fun onResume() {
         super.onResume()
-        TabManager.attach(webScreen.geckoView)
+        // Do not attach GeckoView behind the Home/Tabs/Settings screens. It is
+        // attached synchronously by show(WEB) only when its Surface is visible.
+        if (current == Screen.WEB) TabManager.attach(webScreen.geckoView)
         applySystemUi()
         homeScreen.refresh()
     }

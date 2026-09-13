@@ -4,11 +4,11 @@
 
 ## Get an APK
 
-Push a version tag such as `v1.0.2`. GitHub Actions builds the APKs and publishes a GitHub Release automatically:
+Push a version tag such as `v1.0.3`. GitHub Actions builds the APKs and publishes a GitHub Release automatically:
 
 ```bash
-git tag v1.0.2
-git push origin v1.0.2
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 Download the matching asset from **Releases**:
@@ -19,6 +19,10 @@ Download the matching asset from **Releases**:
 - `MinimalBrowser-universal-debug.apk` — all bundled ABIs; much larger.
 
 These are debug-signed builds. The application ID is `com.minimal.browser` and each release increments the version code, so newer builds install over prior Minimal Browser builds.
+
+## Android 14+ browser-start repair (v1.0.3)
+
+`v1.0.3` changes the GeckoView lifecycle to install the session `ContentDelegate` before opening the session (the ordering required by GeckoView’s Bug 1758212 workaround), then attaches GeckoView only to the visible Web surface. It also contains session-start failures so the Minimal Browser shell remains open rather than crashing.
 
 ## Page-only full screen
 

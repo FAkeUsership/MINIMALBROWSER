@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.0.2)'
+        description: 'Release tag to create or update (for example: v1.0.3)'
         required: true
-        default: 'v1.0.2'
+        default: 'v1.0.3'
         type: string
 
 permissions:
@@ -92,7 +92,7 @@ jobs:
             v*) ;;
             *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
           esac
-          NOTES="Minimal Browser $TAG. Debug-signed APKs: install the arm64-v8a APK on almost all modern Android phones and tablets. The universal APK supports every bundled ABI but is much larger. App ID: com.minimal.browser. Page-only mode: hold Web for 5 seconds; Android Back or a double tap restores controls."
+          NOTES="Minimal Browser $TAG. Includes the GeckoView session-start ordering and visible-renderer lifecycle repair for Android 14+. Debug-signed APKs: install the arm64-v8a APK on almost all modern Android phones and tablets. The universal APK supports every bundled ABI but is much larger. App ID: com.minimal.browser. Page-only mode: hold Web for 5 seconds; Android Back or a double tap restores controls."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else

@@ -64,10 +64,10 @@ object TabManager {
     fun attach(v: GeckoView) {
         view = v
         val tab = active
-        // setSession(null) would throw — only attach when there is a live tab
-        if (tab == null || v.session === tab.session) return
+        // setSession(null) would throw — only attach when there is a live tab.
+        if (tab == null) return
         try {
-            v.setSession(tab.session)
+            if (v.session !== tab.session) v.setSession(tab.session)
             tab.session.setActive(true)
         } catch (e: Throwable) {
             // Never let a compositor/session race take the process down; the screen
@@ -77,8 +77,16 @@ object TabManager {
     }
 
     fun detach() {
-        view?.releaseSession()
+        // Release only the compositor attachment; the open GeckoSession remains
+        // available for the next Web view. This is intentionally guarded because
+        // Android may tear down a Surface before Activity.onPause finishes.
+        val attachedView = view
         view = null
+        try {
+            attachedView?.releaseSession()
+        } catch (e: Throwable) {
+            Log.w(TAG, "releaseSession failed", e)
+        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -103,10 +111,36 @@ object TabManager {
             builder.usePrivateMode(true)
                 .contextId("private-" + UUID.randomUUID())
         }
-        val session = GeckoSession(builder.build())
+        // Keep this session closed until bind(tab) has installed its ContentDelegate.
+        // GeckoView's own quick-start requires that ordering as a workaround for
+        // Bug 1758212. Opening first (the previous code path) can crash the browser
+        // content process on current Android releases.
+        return GeckoSession(builder.build())
+    }
+
+    private fun open(tab: Tab) {
         val rt = runtime ?: BrowserApp.requireRuntime()
-        session.open(rt)
-        return session
+        // bind(tab) runs before this call. In particular, ContentDelegate must be
+        // present before GeckoSession.open(), not attached after the native window.
+        tab.session.open(rt)
+    }
+
+    /** Create a fully configured, opened session or leave no half-open native state. */
+    private fun createOpenedTab(private: Boolean): Tab {
+        val tab = Tab(newSession(private), private)
+        try {
+            bind(tab)
+            open(tab)
+        } catch (e: Throwable) {
+            try {
+                tab.session.close()
+            } catch (_: Throwable) {
+                // open() can fail before a window exists; either way there is no tab to keep.
+            }
+            Log.e(TAG, "GeckoSession setup/open failed", e)
+            throw e
+        }
+        return tab
     }
 
     private fun bind(tab: Tab) {
@@ -149,11 +183,21 @@ object TabManager {
     /* ------------------------------------------------------------------ */
 
     fun newTab(url: String? = null, private: Boolean = false, activate: Boolean = true): Tab {
-        val tab = Tab(newSession(private), private)
+        // Delegate binding deliberately happens before GeckoSession.open() inside
+        // createOpenedTab(). Do not inline/reorder this: GeckoView documents it as
+        // required on Android because an unbound ContentDelegate can crash startup.
+        val tab = createOpenedTab(private)
         tabs += tab
-        bind(tab)
         if (activate) switchTo(tab) else host?.onTabsChanged()
-        if (!url.isNullOrEmpty()) tab.session.load(GeckoSession.Loader().uri(url))
+        if (!url.isNullOrEmpty()) {
+            try {
+                tab.session.load(GeckoSession.Loader().uri(url))
+            } catch (e: Throwable) {
+                // The opened tab is still usable; avoid turning a bad initial URI or
+                // transient native queue failure into an Activity crash.
+                Log.w(TAG, "initial tab load failed: ${e.message}")
+            }
+        }
         return tab
     }
 
@@ -165,7 +209,11 @@ object TabManager {
         val previous = active
         if (previous != null) {
             captureThumbnail(previous)
-            previous.session.setActive(false)
+            try {
+                previous.session.setActive(false)
+            } catch (e: Throwable) {
+                Log.w(TAG, "could not deactivate previous session", e)
+            }
         }
         active = tab
         val v = view
@@ -177,8 +225,12 @@ object TabManager {
                 Log.e(TAG, "switchTo setSession failed", e)
             }
         }
-        tab.session.setActive(true)
-        tab.session.setFocused(true)
+        try {
+            tab.session.setActive(true)
+            tab.session.setFocused(true)
+        } catch (e: Throwable) {
+            Log.e(TAG, "could not activate session", e)
+        }
         host?.onTabsChanged()
         host?.onActiveTabChanged(tab)
     }
@@ -189,7 +241,11 @@ object TabManager {
         tabs.removeAt(index)
         if (active == tab) {
             active = null
-            view?.releaseSession()
+            try {
+                view?.releaseSession()
+            } catch (e: Throwable) {
+                Log.w(TAG, "releaseSession while closing a tab failed", e)
+            }
             val next = tabs.getOrNull(max(0, index - 1))
             if (next != null) {
                 switchTo(next)
@@ -309,9 +365,15 @@ object TabManager {
         if (restorable.isEmpty()) return false
         var restoredAny = false
         for (row in restorable.take(8)) {
-            val tab = Tab(newSession(false), false).also { it.id = row.id }
+            // Bind the ContentDelegate before open here as well. Restored tabs used
+            // to have the same unsafe open-then-bind order as newly created tabs.
+            val tab = try {
+                createOpenedTab(false).also { it.id = row.id }
+            } catch (e: Throwable) {
+                Log.w(TAG, "skipping tab that could not open: ${row.url}", e)
+                continue
+            }
             tabs += tab
-            bind(tab)
             tab.url = row.url
             tab.title = row.title
             var ok = false
@@ -324,7 +386,11 @@ object TabManager {
                 }
             }
             if (!ok && row.url.isNotEmpty()) {
-                tab.session.load(GeckoSession.Loader().uri(row.url))
+                try {
+                    tab.session.load(GeckoSession.Loader().uri(row.url))
+                } catch (e: Throwable) {
+                    Log.w(TAG, "load during restore failed for ${row.url}: ${e.message}")
+                }
             }
             restoredAny = true
         }
@@ -340,7 +406,7 @@ object TabManager {
         }
         tabs.clear()
         active = null
-        view?.releaseSession()
+        detach()
         host?.onTabsChanged()
     }
 
@@ -430,9 +496,14 @@ object TabManager {
             session: GeckoSession,
             url: String
         ): GeckoResult<GeckoSession> {
-            // target="_blank" and window.open() become a real new tab.
-            val tab = newTab(url, private = active?.private == true)
-            return GeckoResult.fromValue(tab.session)
+            // target="_blank" and window.open() become a real new tab. Never let
+            // an engine-side request throw through Gecko's callback thread.
+            return try {
+                GeckoResult.fromValue(newTab(url, private = active?.private == true).session)
+            } catch (e: Throwable) {
+                Log.e(TAG, "could not open requested child session", e)
+                GeckoResult.fromException<GeckoSession>(e)
+            }
         }
 
         override fun onLoadError(

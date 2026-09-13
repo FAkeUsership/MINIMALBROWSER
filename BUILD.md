@@ -7,8 +7,8 @@ The repository contains one Android project: [`minimal-browser/`](minimal-browse
 Push a `v*` tag:
 
 ```bash
-git tag v1.0.2
-git push origin v1.0.2
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 The workflow will:
