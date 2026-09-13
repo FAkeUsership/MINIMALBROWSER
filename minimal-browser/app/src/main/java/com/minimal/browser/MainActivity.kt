@@ -9,8 +9,6 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
@@ -48,12 +46,12 @@ import org.mozilla.geckoview.StorageController
 
 /**
  * Minimal — a landscape, monochrome, privacy-first browser shell around the
- * Firefox (GeckoView) engine.
+ * Mozilla GeckoView engine.
  *
- * Full screen mode (the one extra feature on top of the HTML mock):
- *   • hold the **Web** rail button for 5 s  → everything hides, only the page stays
- *   • press **Back** twice (or double-tap the back pill) → the rail peeks back for 4 s
- *   • hold **Web** again → chrome is restored
+ * Page-only mode:
+ *   • hold the **Web** rail button for exactly 5 seconds → only the page stays
+ *   • Android Back or a double tap on the page → normal browser controls return
+ *   • Android system bars are immersive only while the page-only mode is active
  */
 class MainActivity : AppCompatActivity(), TabManager.Host,
     MenuDrawer.Callback, SettingsScreen.Callback {
@@ -61,6 +59,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /* ---------------- screens ---------------- */
     private lateinit var rail: RailView
     private lateinit var topBar: LinearLayout
+    private lateinit var topDivider: View
     private lateinit var topTitle: TextView
     private lateinit var topCrumb: TextView
     private lateinit var shieldPill: LinearLayout
@@ -79,13 +78,11 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /* ---------------- state ---------------- */
     private var current = Screen.HOME
     private var previousScreen = Screen.HOME
+    /** App page-only mode, entered after holding Web for five seconds. */
     private var fullScreen = false
-    private var peek = false
+    /** A web page's own HTML/video full screen request. */
     private var videoFullScreen = false
 
-    private val main = Handler(Looper.getMainLooper())
-    private val peekTimer = Runnable { setPeek(false); toast.say(getString(R.string.t_controls_hidden)) }
-    private var lastBackAt = 0L
     private var lastExitAt = 0L
     private var firstHoldHintDone = false
 
@@ -117,7 +114,9 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Prefs.init(this)
-        TabManager.init(BrowserApp.requireRuntime())
+        // Do not turn a Gecko startup failure into an Activity crash. The user can
+        // still open Settings/Home and gets a clear message on the Web screen.
+        BrowserApp.runtime?.let { TabManager.init(it) }
         TabManager.host = this
 
         // Landscape is also locked in the manifest (android:screenOrientation).
@@ -169,7 +168,8 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         mainCol.addView(topBar, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(52)
         ))
-        mainCol.addView(View(this).apply { setBackgroundColor(Ink.EDGE) },
+        topDivider = View(this).apply { setBackgroundColor(Ink.EDGE) }
+        mainCol.addView(topDivider,
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
 
         viewport = FrameLayout(this).apply { setBackgroundColor(Ink.SHELL) }
@@ -274,8 +274,6 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private fun wireUp() {
         /* ---- rail ---- */
         rail.home.onTap = { leaveFullScreenIfNeeded(); show(Screen.HOME) }
-        // Tapping Web must NOT leave full screen — the spec is explicit: once in
-        // full screen, controls return only via a double back press.
         rail.web.onTap = { show(Screen.WEB) }
         rail.tabs.onTap = { leaveFullScreenIfNeeded(); show(Screen.TABS) }
         rail.settings.onTap = { leaveFullScreenIfNeeded(); show(Screen.SETTINGS) }
@@ -287,7 +285,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                 toast.say(getString(R.string.t_hold_hint))
             }
         }
-        rail.web.onHoldComplete = { toggleFullScreen() }
+        rail.web.onHoldComplete = { enterPageOnly() }
 
         /* ---- web screen ---- */
         webScreen.onBack = { TabManager.goBack() }
@@ -295,7 +293,9 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         webScreen.onReload = { TabManager.reload() }
         webScreen.onTabs = { show(Screen.TABS) }
         webScreen.onMenu = { drawer.toggle() }
-        webScreen.onBackPill = { handleBackPill() }
+        // In page-only mode the content is visually clean. A double tap anywhere
+        // on the page restores normal browser controls.
+        webScreen.onPageDoubleTap = { if (fullScreen) exitPageOnly() }
         webScreen.onSubmitAddress = { openInput(it) }
         webScreen.onAddressFocused = { UiKeys.hideKeyboard(homeScreen) }
 
@@ -348,16 +348,14 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             Screen.WEB -> {
                 rail.setActive(rail.web)
                 topTitle.text = "Web"
-                val tab = TabManager.active
-                // The session used to be attached only in onResume, so tapping **Web**
-                // after launch (or after returning from Settings) showed an empty
-                // GeckoView until the activity was resumed again.
-                TabManager.attach(webScreen.geckoView)
-                if (tab == null && BrowserApp.engineReady) TabManager.newTab(null)
-                if (!BrowserApp.engineReady) {
-                    toast.say(BrowserApp.startupFailure
-                        ?.let { getString(R.string.t_engine_failed, it) }
-                        ?: getString(R.string.t_engine_failed_generic))
+                var tab = TabManager.active
+                // Attach immediately; waiting for onResume used to leave a blank
+                // GeckoView when Web was selected after launch or Settings.
+                if (BrowserApp.engineReady) {
+                    TabManager.attach(webScreen.geckoView)
+                    if (tab == null) tab = TabManager.newTab(null)
+                } else {
+                    explainEngineUnavailable()
                 }
                 topCrumb.text = tab?.host?.ifEmpty { "loading" } ?: getString(R.string.crumb_browser)
                 webScreen.syncTo(tab)
@@ -399,71 +397,63 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /* ================================================================== */
 
     /**
-     * Port of the HTML `applyFullscreen()`:
-     * rail hidden unless peeking, top bar always hidden in full screen, and on
-     * the web screen the web bar / progress track / blocked banner go too.
+     * Applies true page-only mode. There is no app control, divider, toast, or
+     * system bar over the web page — it matches the clean reference screenshot.
      */
     private fun applyFullScreen() {
-        val on = fullScreen
+        val pageOnly = fullScreen || videoFullScreen
         val onWeb = current == Screen.WEB
 
-        rail.visibility = if (on && !peek) View.GONE else View.VISIBLE
-        topBar.visibility = if (on) View.GONE else View.VISIBLE
+        rail.visibility = if (pageOnly) View.GONE else View.VISIBLE
+        topBar.visibility = if (pageOnly) View.GONE else View.VISIBLE
+        topDivider.visibility = if (pageOnly) View.GONE else View.VISIBLE
+        webScreen.setFullScreen(pageOnly && onWeb)
 
-        webScreen.setFullScreen(on && onWeb)
-        if (!on) webScreen.syncTo(TabManager.active)
-
-        applySystemUi()
+        // A toast, even for a short time, would violate the "only the page"
+        // contract. This also suppresses any later background callback toast.
+        toast.setSuppressed(pageOnly)
+        if (!pageOnly) webScreen.syncTo(TabManager.active)
+        applySystemUi(pageOnly)
     }
 
-    private fun applySystemUi() {
+    /**
+     * Normal browser screens use normal Android system bars. In page-only mode
+     * system bars are immersive and any edge reveal automatically disappears
+     * again, like other Android full-screen apps.
+     */
+    private fun applySystemUi(pageOnly: Boolean = fullScreen || videoFullScreen) {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
-        // The user asked for the Android status bar (battery / clock) to be gone while
-        // using the app, not only in full screen. So: never fit the system windows, and
-        // keep the bars hidden at all times — a swipe from the edge still reveals them
-        // transiently, which is what immersive sticky is for.
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        controller.hide(WindowInsetsCompat.Type.systemBars())
-        if (fullScreen) {
+        WindowCompat.setDecorFitsSystemWindows(window, !pageOnly)
+        if (pageOnly) {
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.hide(WindowInsetsCompat.Type.displayCutout())
         } else {
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            controller.show(WindowInsetsCompat.Type.systemBars())
             controller.show(WindowInsetsCompat.Type.displayCutout())
         }
     }
 
-    private fun toggleFullScreen() {
-        if (!fullScreen) {
-            fullScreen = true
-            peek = false
-            show(Screen.WEB)
-            toast.say(getString(R.string.t_fs_enter))
-        } else {
-            fullScreen = false
-            peek = false
-            main.removeCallbacks(peekTimer)
-            webScreen.cancelEditing()
-            applyFullScreen()
-            toast.say(getString(R.string.t_fs_exit))
-        }
+    /** Enter page-only mode after the Web rail button has been held for 5 seconds. */
+    private fun enterPageOnly() {
+        if (fullScreen) return
+        fullScreen = true
+        drawer.closeImmediately()
+        webScreen.cancelEditing()
+        show(Screen.WEB)
     }
 
-    /** Reveal just the rail for 4 s (the double-back behaviour). */
-    private fun setPeek(value: Boolean) {
-        peek = value
-        main.removeCallbacks(peekTimer)
-        if (value) main.postDelayed(peekTimer, 4000)
-        applyFullScreen()
-    }
-
-    private fun leaveFullScreenIfNeeded() {
+    /** Android Back or a page double tap restores the usual browser UI. */
+    private fun exitPageOnly() {
         if (!fullScreen) return
         fullScreen = false
-        peek = false
-        main.removeCallbacks(peekTimer)
+        webScreen.cancelEditing()
         applyFullScreen()
     }
+
+    private fun leaveFullScreenIfNeeded() = exitPageOnly()
 
     /* ================================================================== */
     /*  back handling                                                      */
@@ -479,22 +469,8 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             return
         }
         if (fullScreen) {
-            val now = System.currentTimeMillis()
-            if (now - lastBackAt < 500) {
-                lastBackAt = 0
-                if (peek) {
-                    setPeek(false)
-                    toast.say(getString(R.string.t_hidden_again))
-                } else {
-                    setPeek(true)
-                    toast.say(getString(R.string.t_buttons_shown))
-                }
-            } else {
-                lastBackAt = now
-                main.postDelayed({
-                    if (lastBackAt != 0L) toast.say(getString(R.string.t_double_tap_hint))
-                }, 520)
-            }
+            // Physical/gesture Back is the direct way out of the clean page view.
+            exitPageOnly()
             return
         }
         if (current == Screen.LIST) {
@@ -510,28 +486,25 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             finish()
         } else {
             lastExitAt = now
-            toast.say("Press back again to close Minimal")
+            toast.say("Press back again to close Minimal Browser")
         }
     }
 
-    /** The on-screen back pill behaves exactly like the hardware/gesture back. */
-    private fun handleBackPill() {
-        val now = System.currentTimeMillis()
-        if (now - lastBackAt < 500) {
-            lastBackAt = 0
-            if (peek) {
-                setPeek(false)
-                toast.say(getString(R.string.t_hidden_again))
-            } else {
-                setPeek(true)
-                toast.say(getString(R.string.t_buttons_shown))
-            }
-        } else {
-            lastBackAt = now
-            main.postDelayed({
-                if (lastBackAt != 0L) toast.say(getString(R.string.t_double_tap_hint))
-            }, 520)
-        }
+    /* ================================================================== */
+    /*  engine availability                                                */
+    /* ================================================================== */
+
+    /** Keeps an engine-start failure from becoming a second, avoidable crash. */
+    private fun engineReady(): Boolean {
+        if (BrowserApp.engineReady) return true
+        explainEngineUnavailable()
+        return false
+    }
+
+    private fun explainEngineUnavailable() {
+        toast.say(BrowserApp.startupFailure
+            ?.let { getString(R.string.t_engine_failed, it) }
+            ?: getString(R.string.t_engine_failed_generic))
     }
 
     /* ================================================================== */
@@ -550,6 +523,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     private fun openUrl(url: String) {
+        if (!engineReady()) return
         val resolved = if (url.startsWith("http")) url else UrlBar.resolve(url)
         if (resolved.isEmpty()) return
         if (TabManager.active == null) TabManager.newTab(resolved)
@@ -558,6 +532,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     private fun newTab() {
+        if (!engineReady()) return
         val target = when (Prefs.homepageMode) {
             HomePageModes.BLANK -> "about:blank"
             HomePageModes.CUSTOM -> Prefs.customHomeUrl.ifBlank { "about:blank" }
@@ -569,6 +544,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     private fun newPrivateTab() {
+        if (!engineReady()) return
         val tab = TabManager.newTab(null, private = true)
         TabManager.switchTo(tab)
         toast.say("Private tab — nothing will be recorded")
@@ -576,6 +552,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     private fun handleLaunchIntent(intent: Intent?) {
+        if (!BrowserApp.engineReady) {
+            bootstrap()
+            return
+        }
         intent ?: run { bootstrap(); return }
         val uri = intent.dataString
         val query = intent.getStringExtra("query")
@@ -595,6 +575,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     private fun bootstrap() {
+        if (!BrowserApp.engineReady) {
+            show(Screen.HOME)
+            return
+        }
         val restored = TabManager.restore(this)
         if (restored) {
             TabManager.tabs.firstOrNull()?.let { TabManager.switchTo(it) }
@@ -657,19 +641,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     override fun onEnterVideoFullScreen(fullScreen: Boolean) {
         videoFullScreen = fullScreen
-        if (fullScreen) {
-            rail.visibility = View.GONE
-            topBar.visibility = View.GONE
-            webScreen.webBar.visibility = View.GONE
-            webScreen.progressTrack.visibility = View.GONE
-            webScreen.blockedBanner.visibility = View.GONE
-            val controller = WindowCompat.getInsetsController(window, window.decorView)
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-        } else {
-            applyFullScreen()
-        }
+        applyFullScreen()
     }
 
     override fun onDownloadStarted(fileName: String) {
@@ -816,7 +788,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                     if (checked[2]) flags = flags or StorageController.ClearFlags.ALL_CACHES
                     if (checked[3]) db.clearBlocked()
                     if (flags != 0L) {
-                        BrowserApp.requireRuntime().storageController.clearData(flags)
+                        BrowserApp.runtime?.storageController?.clearData(flags)
                     }
                     runOnUiThread { toast.say("Browsing data cleared") }
                 }.start()
@@ -826,8 +798,8 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     override fun onShowAbout() {
         AlertDialog.Builder(this, R.style.Theme_Minimal_Dialog)
-            .setTitle("Minimal ${BuildConfig.VERSION_NAME}")
-            .setMessage("Open-source browser (MPL 2.0)\nEngine: Firefox / GeckoView")
+            .setTitle("Minimal Browser ${BuildConfig.VERSION_NAME}")
+            .setMessage("Open-source browser (MPL 2.0)\nEngine: Mozilla GeckoView")
             .setPositiveButton("OK", null)
             .show()
     }
@@ -887,13 +859,17 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     override fun onDestroy() {
         super.onDestroy()
         TabManager.host = null
-        main.removeCallbacksAndMessages(null)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applySystemUi()
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         try {
-            BrowserApp.requireRuntime().configurationChanged(newConfig)
+            BrowserApp.runtime?.configurationChanged(newConfig)
         } catch (_: Exception) {
         }
     }

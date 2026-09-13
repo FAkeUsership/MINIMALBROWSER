@@ -19,7 +19,7 @@ import kotlin.math.max
 
 /**
  * Multi-tab controller. One [GeckoView] is shared; tabs swap their
- * [GeckoSession] in and out of it — the same model Firefox for Android uses.
+ * [GeckoSession] in and out of it — one shared rendering surface for the app.
  */
 object TabManager {
 

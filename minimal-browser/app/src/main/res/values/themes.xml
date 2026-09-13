@@ -3,7 +3,9 @@
     <style name="Theme.Minimal" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/shell</item>
         <item name="android:colorBackground">@color/shell</item>
-        <item name="android:windowFullscreen">true</item>
+        <!-- Normal browser screens keep the real Android system bars available.
+             Page-only mode hides them programmatically and restores them on Back/double tap. -->
+        <item name="android:windowFullscreen">false</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="colorPrimary">@color/shell</item>
         <item name="colorPrimaryDark">@color/black</item>

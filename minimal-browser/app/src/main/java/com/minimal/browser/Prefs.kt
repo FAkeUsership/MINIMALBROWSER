@@ -21,7 +21,6 @@ object Prefs {
     private const val K_SEARCH_ENGINE = "search_engine"
     private const val K_HOMEPAGE = "homepage"
     private const val K_CUSTOM_HOME = "custom_home"
-    private const val K_HOLD_SECONDS = "hold_seconds"
     private const val K_JS = "javascript"
     private const val K_DESKTOP_UA = "desktop_ua"
     private const val K_FIRST_RUN = "first_run"
@@ -84,12 +83,9 @@ object Prefs {
         set(v) = sp.edit().putBoolean(K_DESKTOP_UA, v).apply()
 
     /* ---- Full-screen gesture ---- */
-    /** How long the Web rail button must be held. Default 5s, as specified. */
-    var holdSeconds: Int
-        get() = sp.getInt(K_HOLD_SECONDS, 5)
-        set(v) = sp.edit().putInt(K_HOLD_SECONDS, v.coerceIn(1, 15)).apply()
-
-    val holdMillis: Long get() = holdSeconds * 1000L
+    /** The product gesture is deliberately fixed: hold Web for exactly five seconds. */
+    const val HOLD_MILLIS: Long = 5_000L
+    val holdMillis: Long get() = HOLD_MILLIS
 
     /* ---- misc ---- */
     var firstRun: Boolean

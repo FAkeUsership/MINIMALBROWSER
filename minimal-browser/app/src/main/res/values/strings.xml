@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Minimal</string>
+    <string name="app_name">Minimal Browser</string>
 
     <!-- rail -->
     <string name="rail_home">Home</string>
@@ -20,21 +20,10 @@
 
     <string name="home_empty_recent">Nothing here yet — pages you open show up here.</string>
 
-    <!-- web -->
-    <string name="web_back_hint">double-tap = show buttons</string>
-    <string name="web_back_label">◀ back</string>
-
-
-    <!-- toasts (ported from the HTML script) -->
-    <string name="t_fs_enter">Full screen — only the page. Press back twice for buttons.</string>
-    <string name="t_fs_exit">Chrome restored</string>
+    <!-- page-only mode and engine recovery -->
     <string name="t_engine_failed">Engine did not start — pages cannot load (%1$s)</string>
     <string name="t_engine_failed_generic">Engine did not start — pages cannot load</string>
-    <string name="t_hold_hint">Keep holding to hide everything…</string>
-    <string name="t_controls_hidden">Controls hidden again</string>
-    <string name="t_buttons_shown">Buttons shown — hold Web 5s to restore full bar</string>
-    <string name="t_double_tap_hint">Double-tap back to show the buttons</string>
-    <string name="t_hidden_again">Hidden again</string>
+    <string name="t_hold_hint">Keep holding to enter page-only mode…</string>
     <string name="t_hold_web_hint">Hold the Web icon (left rail) for 5 seconds</string>
     <string name="t_tab_closed">Tab closed</string>
     <string name="t_new_tab">New tab opened</string>

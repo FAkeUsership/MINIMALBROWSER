@@ -5,7 +5,9 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.text.InputType
 import android.util.TypedValue
+import android.view.GestureDetector
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -34,7 +36,8 @@ class WebScreen(context: Context) : LinearLayout(context) {
     var onTabs: (() -> Unit)? = null
     var onMenu: (() -> Unit)? = null
     var onSubmitAddress: ((String) -> Unit)? = null
-    var onBackPill: (() -> Unit)? = null
+    /** Used only while page-only mode is active. */
+    var onPageDoubleTap: (() -> Unit)? = null
     var onAddressFocused: (() -> Unit)? = null
 
     /* ---- views ---- */
@@ -43,17 +46,35 @@ class WebScreen(context: Context) : LinearLayout(context) {
     val addressLabel: TextView
     val lockIcon: ImageView
     val blockedChip: TextView
+    private val webDivider: View
     val progressTrack: FrameLayout
     private val progressFill: View
     val container: FrameLayout
     val geckoView: GeckoView
     val blockedBanner: TextView
-    val backPill: LinearLayout
 
     private val btnBack: ImageView
     private val btnForward: ImageView
     private val btnReload: ImageView
     private var editing = false
+    private var pageOnly = false
+
+    /**
+     * Returning false from the touch listener below keeps ordinary web content
+     * gestures intact. The detector merely observes a double tap while the page
+     * is in the clean, page-only mode.
+     */
+    private val pageGestureDetector = GestureDetector(context,
+        object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(event: MotionEvent): Boolean = true
+
+            override fun onDoubleTap(event: MotionEvent): Boolean {
+                if (!pageOnly) return false
+                onPageDoubleTap?.invoke()
+                return true
+            }
+        }
+    )
 
     init {
         orientation = VERTICAL
@@ -127,9 +148,10 @@ class WebScreen(context: Context) : LinearLayout(context) {
 
         addView(webBar, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
-        // `border-bottom:1px solid #e3e3e3` from the HTML
-        addView(View(context).apply { setBackgroundColor(Ink.PLINE.toInt()) },
-            LayoutParams(LayoutParams.MATCH_PARENT, context.dp(1)))
+        // `border-bottom:1px solid #e3e3e3` from the HTML. It is deliberately
+        // removed in page-only mode so no app pixel remains above the web page.
+        webDivider = View(context).apply { setBackgroundColor(Ink.PLINE.toInt()) }
+        addView(webDivider, LayoutParams(LayoutParams.MATCH_PARENT, context.dp(1)))
 
         /* ---------------- progress track (.webtrack) ---------------- */
         progressTrack = FrameLayout(context).apply { setBackgroundColor(Color.WHITE) }
@@ -141,6 +163,12 @@ class WebScreen(context: Context) : LinearLayout(context) {
         /* ---------------- page + overlays ---------------- */
         container = FrameLayout(context).apply { setBackgroundColor(Ink.SHELL) }
         geckoView = GeckoView(context)
+        // The page remains fully interactive. In page-only mode this only observes
+        // a double tap and lets GeckoView continue to receive every touch event.
+        geckoView.setOnTouchListener { _, event ->
+            if (pageOnly) pageGestureDetector.onTouchEvent(event)
+            false
+        }
         container.addView(geckoView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
         ))
@@ -161,38 +189,8 @@ class WebScreen(context: Context) : LinearLayout(context) {
             topMargin = context.dp(10)
         })
 
-        // .backpill — only visible in full screen
-        backPill = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = context.roundRect(99, 0xFF111111.toInt(), Ink.EDGE2)
-            setPadding(context.dp(16), context.dp(10), context.dp(16), context.dp(10))
-            isClickable = true
-            isFocusable = true
-            visibility = GONE
-
-            addView(TextView(context).apply {
-                text = context.getString(R.string.web_back_label)
-                setTextColor(Color.WHITE)
-                setTypeface(typeface, Typeface.BOLD)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
-            })
-            addView(TextView(context).apply {
-                text = context.getString(R.string.web_back_hint)
-                setTextColor(Color.WHITE)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
-            }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
-                leftMargin = context.dp(8)
-            })
-        }
-        backPill.setOnClickListener { onBackPill?.invoke() }
-        container.addView(backPill, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = Gravity.BOTTOM or Gravity.START
-            leftMargin = context.dp(18)
-            bottomMargin = context.dp(18)
-        })
+        // Page-only mode intentionally has no floating back pill or overlay.
+        // Android Back and a double tap on the page restore normal controls.
 
         addView(container, LayoutParams(LayoutParams.MATCH_PARENT, 0).apply { weight = 1f })
     }
@@ -329,17 +327,18 @@ class WebScreen(context: Context) : LinearLayout(context) {
     }
 
     /**
-     * Full screen: the web bar, the progress track and the shield banner all
-     * disappear, only the page (and the back pill) remain.
+     * Page-only mode leaves GeckoView as the sole visible view: no address bar,
+     * divider, loading line, blocked badge, or floating control remains.
      */
     fun setFullScreen(on: Boolean) {
+        pageOnly = on
         webBar.visibility = if (on) GONE else VISIBLE
+        webDivider.visibility = if (on) GONE else VISIBLE
         progressTrack.visibility = if (on) GONE else INVISIBLE
         if (on) {
             blockedBanner.visibility = GONE
             cancelEditing()
         }
-        backPill.visibility = if (on) VISIBLE else GONE
     }
 
     /* ------------------------------------------------------------------ */

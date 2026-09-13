@@ -161,7 +161,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         3 -> "What a new tab opens."
         4 -> "Where files land and what you have fetched."
         5 -> "Take your bookmarks and history with you."
-        else -> "Minimal · open source (MPL 2.0) · Firefox engine"
+        else -> "Minimal Browser · open source (MPL 2.0) · GeckoView engine"
     }
 
     /* ================================================================== */
@@ -173,29 +173,14 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         out += group("Full screen — gesture controls")
         out += infoRow(
             R.drawable.ic_globe,
-            "Hold the Web icon for ${Prefs.holdSeconds} seconds",
-            "Everything hides — address bar, back/forward, shields, the Android status bar. Only the page stays."
+            "Hold the Web icon for 5 seconds",
+            "Everything hides — the app bars, address controls, and Android system bars. Only the page stays."
         )
         out += infoRow(
             R.drawable.ic_back,
-            "Press Back twice",
-            "Brings back the Home / Web / Tabs / Settings buttons so you can move around."
+            "Android Back or double-tap the page",
+            "Restores the normal browser controls and normal Android system bars."
         )
-        out += infoRow(
-            R.drawable.ic_sliders,
-            "Hold Web again",
-            "Restores the full bar (search + everything). Hold once more to hide it all again."
-        )
-        out += spinnerRow(
-            R.drawable.ic_sliders,
-            "Hold duration",
-            "How long the Web button must be held before full screen kicks in",
-            (1..15).map { "$it s" },
-            Prefs.holdSeconds - 1
-        ) { position ->
-            Prefs.holdSeconds = position + 1
-            render()
-        }
 
         out += group("Theme")
         out += switchRow(
@@ -355,8 +340,8 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
             callback?.onClearData()
         }
         out += group("About")
-        out += infoRow(R.drawable.ic_info, "Version", "Minimal ${BuildConfig.VERSION_NAME} · open-source (MPL 2.0)")
-        out += infoRow(R.drawable.ic_globe, "Engine", "Firefox / GeckoView — the same engine as Firefox for Android")
+        out += infoRow(R.drawable.ic_info, "Version", "Minimal Browser ${BuildConfig.VERSION_NAME} · open-source (MPL 2.0)")
+        out += infoRow(R.drawable.ic_globe, "Engine", "Mozilla GeckoView")
         out += infoRow(R.drawable.ic_shield, "Block list", "Request-level EasyList-style rules plus Gecko tracking protection")
         return out
     }

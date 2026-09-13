@@ -1,106 +1,41 @@
-# Minimal — a landscape, black-&-white Android browser
+# Minimal Browser
 
-One repo, two builds of the same app. Same UI, same left rail, same
-**hold-Web-for-5-seconds full screen**. They differ only in the engine.
-
-| | `firefox/` | `lite/` |
-| --- | --- | --- |
-| Engine | **Firefox / GeckoView** (open source, MPL 2.0) | Android system WebView |
-| Universal APK | ~530 MB | **~4 MB** |
-| Per-ABI APK | ~160–220 MB | n/a |
-| `applicationId` | `com.minimal.browser` | `com.minimal.browser.lite` |
-| Private tabs | real isolated session | history suppressed only |
-| Fingerprinting resistance | yes | no |
-| HTTPS-only upgrades | yes | mixed-content policy only |
-| minSdk | 26 | 24 |
-
-They have different application IDs, so **both can be installed side by side**.
-
----
+**Minimal Browser** is a native, landscape Android browser built with Kotlin and Mozilla GeckoView. Its visible app name, GitHub Actions job, release titles, and Android project directory all use **Minimal Browser** branding.
 
 ## Get an APK
 
-Push a tag and CI publishes to the Releases page:
+Push a version tag such as `v1.0.2`. GitHub Actions builds the APKs and publishes a GitHub Release automatically:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
-Then download from **repo → Releases**. A tag builds:
+Download the matching asset from **Releases**:
 
-* `MinimalBrowser-lite-debug.apk` — ~4 MB
-* `app-arm64-v8a-debug.apk` — Firefox engine, for modern tablets ← install this one
-* `app-armeabi-v7a-debug.apk` — Firefox engine, old 32-bit devices
-* `app-x86_64-debug.apk` — Firefox engine, emulators
-* `app-universal-debug.apk` — Firefox engine, ~530 MB, every ABI
+- `MinimalBrowser-arm64-v8a-debug.apk` — recommended for nearly all current Android phones/tablets.
+- `MinimalBrowser-armeabi-v7a-debug.apk` — older 32-bit ARM devices.
+- `MinimalBrowser-x86_64-debug.apk` — x86_64 emulators.
+- `MinimalBrowser-universal-debug.apk` — all bundled ABIs; much larger.
 
-Install:
+These are debug-signed builds. The application ID is `com.minimal.browser` and each release increments the version code, so newer builds install over prior Minimal Browser builds.
 
-```bash
-adb install -r app-arm64-v8a-debug.apk
+## Page-only full screen
+
+1. Open **Web** normally.
+2. **Hold the Web icon for exactly 5 seconds.**
+3. The rail, app top bar, address controls, dividers, progress line, badges, toast, and Android system bars disappear. The web page is the only visible content.
+4. Press Android **Back** or **double-tap the page** to return to the normal browser controls and normal Android system bars.
+
+Android system bars are not permanently hidden in ordinary screens. While page-only mode is active, edge-revealed bars use Android's transient immersive behavior and hide again automatically.
+
+## Project layout
+
+```text
+minimal-browser/       Android Gradle project
+.github/workflows/     GitHub build + Release workflow
 ```
 
-These are debug-signed, so they install directly with no keystore.
+The workflow explicitly installs Android API 36 and keeps `ANDROID_HOME` intact. A previous workflow removed the Android SDK before Gradle ran, which made every GitHub build fail with “SDK location not found.”
 
-A plain `git push` to `main` builds only the Lite variant and attaches it to
-the workflow run as an artifact (small enough to be free-tier friendly).
-
----
-
-## Why CI instead of building locally
-
-The Firefox build needs more machine than most people expect: the GeckoView
-artifact is ~241 MB and the packaged APK is ~530 MB. `ubuntu-latest` gives you
-16 GB RAM / 14 GB disk, which is comfortable. A 1 GB container will get
-OOM-killed during `packageDebug` — that is a memory ceiling, not a bug.
-
-Release assets are used rather than `upload-artifact` for the Firefox APK on
-purpose: workflow artifacts count against the Actions storage budget
-(500 MB free), while a single Release asset may be up to 2 GB.
-
----
-
-## Full screen mode
-
-| Gesture | Result |
-| --- | --- |
-| **Hold the `Web` rail button 5 s** | A ring fills. On completion the rail, top bar, address bar, back/forward, shield pill, progress track, blocked banner **and the Android status + navigation bars** all disappear. Only the page stays. |
-| **Press Back twice** | The rail peeks back for 4 s so you can move around. |
-| **Double-tap the `◀ back` pill** | Same, for devices without a back gesture. |
-| **Hold `Web` again** | Chrome fully restored. |
-| **Tap `Web`** | Just switches to the Web screen. |
-
-Hold length is configurable: Settings → Appearance → Hold duration (1–15 s).
-A normal tap is never swallowed — releasing early cancels the hold.
-
----
-
-## Features
-
-Multi-tab with real thumbnails and session restore · private tabs · two-layer
-ad/tracker blocking (engine protection **plus** the request-level rules in
-`app/src/main/assets/blocklist.txt`, evaluated for sub-resources too) ·
-downloads to your Files app · print · find in page · bookmarks · history ·
-JSON export/import · clear browsing data · monochrome error pages · landscape
-lock · HTML-video full screen.
-
----
-
-## Build locally
-
-Each folder is a standalone Gradle project with its own wrapper.
-
-```bash
-cd lite     && ./gradlew assembleDebug   # ~4 MB, quick
-cd firefox  && ./gradlew assembleDebug   # ~530 MB, needs RAM
-```
-
-JDK 17+. The Firefox module uses Gradle 8.13 / AGP 8.13.0 / Kotlin 2.4.10 —
-see `firefox/README.md` for why it cannot go lower.
-
----
-
-## Licences
-
-App code: yours. The bundled engine is GeckoView, Mozilla Public License 2.0.
+See [`minimal-browser/README.md`](minimal-browser/README.md) for technical details.

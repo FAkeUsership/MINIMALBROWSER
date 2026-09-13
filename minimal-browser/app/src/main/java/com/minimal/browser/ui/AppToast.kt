@@ -15,6 +15,7 @@ import androidx.core.view.ViewCompat
 class AppToast(context: Context) : AppCompatTextView(context) {
 
     private val hideRunnable = Runnable { hide() }
+    private var suppressed = false
 
     init {
         text = ""
@@ -34,7 +35,7 @@ class AppToast(context: Context) : AppCompatTextView(context) {
     }
 
     fun say(message: String) {
-        if (message.isEmpty()) return
+        if (suppressed || message.isEmpty()) return
         text = message
         visibility = VISIBLE
         removeCallbacks(hideRunnable)
@@ -49,5 +50,20 @@ class AppToast(context: Context) : AppCompatTextView(context) {
         animate().alpha(0f).translationY(dp(20f)).setDuration(250).withEndAction {
             visibility = GONE
         }.start()
+    }
+
+    /** Prevent toast overlays while a page is intentionally the only visible view. */
+    fun setSuppressed(value: Boolean) {
+        suppressed = value
+        if (value) dismissImmediately()
+    }
+
+    /** Immediately remove every toast before the browser enters page-only mode. */
+    fun dismissImmediately() {
+        removeCallbacks(hideRunnable)
+        animate().cancel()
+        alpha = 0f
+        translationY = dp(20f)
+        visibility = GONE
     }
 }

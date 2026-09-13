@@ -156,7 +156,7 @@ class MenuDrawer(context: Context) : FrameLayout(context) {
 
         menuBox += separator()
         menuBox += label("Controls")
-        menuBox += item(R.drawable.ic_globe, "Full screen", "hold Web ${Prefs.holdSeconds}s") {
+        menuBox += item(R.drawable.ic_globe, "Page-only mode", "hold Web for 5 seconds") {
             callback?.onToggleFullScreen(); close()
         }
         menuBox += item(R.drawable.ic_search, "Find in page", null) { callback?.onFindInPage(); close() }
@@ -286,6 +286,17 @@ class MenuDrawer(context: Context) : FrameLayout(context) {
         scrim.animate().alpha(0f).setDuration(200).withEndAction {
             visibility = GONE
         }.start()
+    }
+
+    /** Used before page-only mode so no drawer frame remains for an animation. */
+    fun closeImmediately() {
+        open = false
+        showRunnable?.let { removeCallbacks(it) }
+        panel.animate().cancel()
+        scrim.animate().cancel()
+        panel.translationX = context.dp(330f)
+        scrim.alpha = 0f
+        visibility = GONE
     }
 
     /** Called when the tab set or bookmark state changes. */

@@ -1,64 +1,105 @@
-name: Build Minimal Browser (GeckoView)
+name: Build Minimal Browser
 
-# HOW TO TRIGGER: push a tag named v1.0.0 — see the instructions. Or run this
-# workflow manually from the Actions tab. It builds on GitHub's own Linux
-# runners (16 GB RAM), which are free and unlimited on public repositories.
-
+# A v* tag builds the APKs on GitHub and publishes them to that Release.
+# The manual option is useful when the Actions page is more convenient than git.
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to create or update (for example: v1.0.2)'
+        required: true
+        default: 'v1.0.2'
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  firefox:
-    name: Firefox (GeckoView 153)
-    runs-on: ubuntu-latest           # 16 GB RAM / 4 vCPU — required, do not change
+  minimal-browser:
+    name: Minimal Browser (GeckoView)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # setup-android provides sdkmanager and accepts the licences. Install the
+      # exact compile SDK rather than relying on the hosted-image defaults.
+      - name: Install Android API 36
+        run: |
+          set -euo pipefail
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/aapt2"
+
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Free disk headroom
+      # Keep the Android SDK. The old workflow deleted /usr/local/lib/android
+      # here, even though ANDROID_HOME points there; Gradle then had no SDK and
+      # every build failed before Kotlin compilation.
+      - name: Free non-Android disk headroom
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL || true
           df -h / | tail -1
+          test -d "$ANDROID_HOME/platforms/android-36"
 
       - name: Assemble
-        working-directory: firefox
+        working-directory: minimal-browser
         run: ./gradlew --no-daemon --stacktrace assembleDebug
 
       - name: Verify APKs
         run: |
           set -euo pipefail
-          cd firefox/app/build/outputs/apk/debug
-          ls -l --block-size=MB
-          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)
-          for a in *.apk; do
-            echo "--- $a ---"
-            "$AAPT2" dump badging "$a" | grep -E "^package|screenOrientation|sdkVersion|native-code"
+          cd minimal-browser/app/build/outputs/apk/debug
+          ls -lh
+          AAPT2="$ANDROID_HOME/build-tools/36.0.0/aapt2"
+          for apk in *.apk; do
+            echo "--- $apk ---"
+            "$AAPT2" dump badging "$apk" | grep -E '^package|screenOrientation|sdkVersion|native-code'
           done
 
-      - name: Publish to Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
+      - name: Prepare release files
         run: |
           set -euo pipefail
-          cd firefox/app/build/outputs/apk/debug
-          NOTES="Debug-signed builds. Installable and usable, but anyone holding a debug key could sign an update over these, so this is not an official distribution channel. INSTALL app-arm64-v8a-debug.apk on any phone from roughly 2017 onward (real Firefox/GeckoView 153 engine, about 200 MB). app-universal-debug.apk is only needed for 32-bit devices or emulators (about 530 MB, carries the engine for all three ABIs). Landscape-only, application id com.minimal.browser."
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Minimal Browser $TAG" --notes "$NOTES" app-arm64-v8a-debug.apk || gh release upload "$TAG" app-arm64-v8a-debug.apk --clobber --repo "$GITHUB_REPOSITORY"
-          gh release upload "$TAG" app-universal-debug.apk --clobber --repo "$GITHUB_REPOSITORY"
-          echo "=== release assets ==="
+          src=minimal-browser/app/build/outputs/apk/debug
+          mkdir -p release
+          cp "$src/app-arm64-v8a-debug.apk" release/MinimalBrowser-arm64-v8a-debug.apk
+          cp "$src/app-armeabi-v7a-debug.apk" release/MinimalBrowser-armeabi-v7a-debug.apk
+          cp "$src/app-x86_64-debug.apk" release/MinimalBrowser-x86_64-debug.apk
+          cp "$src/app-universal-debug.apk" release/MinimalBrowser-universal-debug.apk
+          ls -lh release
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          case "$TAG" in
+            v*) ;;
+            *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
+          esac
+          NOTES="Minimal Browser $TAG. Debug-signed APKs: install the arm64-v8a APK on almost all modern Android phones and tablets. The universal APK supports every bundled ABI but is much larger. App ID: com.minimal.browser. Page-only mode: hold Web for 5 seconds; Android Back or a double tap restores controls."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Minimal Browser $TAG" \
+              --notes "$NOTES"
+          fi
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY"

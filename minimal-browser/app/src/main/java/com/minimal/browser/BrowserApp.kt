@@ -8,7 +8,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
 
 /**
- * Owns the single GeckoRuntime (the Firefox engine) for the whole process and
+ * Owns the single Mozilla GeckoView runtime for the whole process and
  * keeps the privacy settings in sync with the Settings screen.
  */
 class BrowserApp : Application() {
@@ -75,7 +75,7 @@ class BrowserApp : Application() {
             .build()
 
         val builder = GeckoRuntimeSettings.Builder()
-            // Firefox prefs: https-first everywhere, and no telemetry home phone.
+            // Gecko preferences: HTTPS-first everywhere, and no telemetry home phone.
             .arguments(
                 arrayOf(
                     "-pref", "dom.security.https_only_mode=true",
@@ -124,7 +124,7 @@ class BrowserApp : Application() {
         }
     }
 
-    /** Firefox's fingerprinting resistance (the "Block fingerprinting" row). */
+    /** GeckoView fingerprinting resistance (the "Block fingerprinting" row). */
     private fun applyFingerprinting(settings: GeckoRuntimeSettings) {
         settings.setFingerprintingProtection(Prefs.blockFingerprinting)
         settings.contentBlocking.setAntiTracking(trackingCategories())

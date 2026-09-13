@@ -25,8 +25,8 @@ import com.minimal.browser.R
 /**
  * One button in the left rail — port of `.rbtn` from the HTML.
  *
- * Tap = navigate. On the Web button, *holding* it for [Prefs.holdSeconds]
- * (5s by default) fills the progress ring and toggles full screen.
+ * Tap = navigate. On the Web button, *holding* it for exactly five seconds
+ * fills the progress ring and enters page-only mode.
  */
 class RailButton(
     context: Context,

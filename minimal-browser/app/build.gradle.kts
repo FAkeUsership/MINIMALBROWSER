@@ -13,8 +13,8 @@ android {
         applicationId = "com.minimal.browser"
         minSdk = 26          // GeckoView declares minSdkVersion 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
     }
 
     buildTypes {
@@ -69,6 +69,6 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
 
-    // ---- Firefox / GeckoView engine (open source, prebuilt, MPL 2.0) ----
+    // ---- Mozilla GeckoView engine (open source, prebuilt, MPL 2.0) ----
     implementation("org.mozilla.geckoview:geckoview:153.0.20260810162159")
 }
