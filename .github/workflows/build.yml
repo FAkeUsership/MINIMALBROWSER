@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.2.0)'
+        description: 'Release tag to create or update (for example: v1.2.1)'
         required: true
-        default: 'v1.2.0'
+        default: 'v1.2.1'
         type: string
 
 permissions:
@@ -65,7 +65,7 @@ jobs:
           test -s "$APK"
           unzip -t "$APK" >/dev/null
           "$AAPT2" dump badging "$APK" | tee /tmp/minimal-browser-badging.txt
-          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.0'" /tmp/minimal-browser-badging.txt
+          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.1'" /tmp/minimal-browser-badging.txt
           grep -Eq "native-code:.*'arm64-v8a'" /tmp/minimal-browser-badging.txt
           # Assert against the built APK, not source: exactly the requested ABI
           # and Gecko's main native library must be present.

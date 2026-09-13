@@ -2,15 +2,15 @@
 
 The only supported release build path is **GitHub Actions** in [`.github/workflows/build.yml`](.github/workflows/build.yml). Do not use a local Android/Gradle build to publish an APK.
 
-## Publish v1.2.0
+## Publish v1.2.1
 
 1. Confirm `versionCode` and `versionName` in `minimal-browser/app/build.gradle.kts`.
 2. Commit and push the repair.
 3. Push a new, unused `v*` tag that matches the Android version:
 
    ```bash
-   git tag v1.2.0
-   git push origin v1.2.0
+   git tag v1.2.1
+   git push origin v1.2.1
    ```
 
 4. Open **Actions** and wait for **Build Minimal Browser** to finish successfully.
@@ -22,7 +22,7 @@ The workflow can also be started manually from Actions with a new tag beginning 
 
 1. Java 17, Android API 36, and build-tools 36.0.0 are present on the GitHub runner.
 2. `assembleDebug` produces the APK.
-3. The generated APK has application ID `com.minimal.browser`, version `1.2.0`, and ARM64 native code.
+3. The generated APK has application ID `com.minimal.browser`, version `1.2.1`, and ARM64 native code.
 4. The generated archive contains Gecko's `lib/arm64-v8a/libxul.so` and contains no other ABI directory.
 5. The generated manifest requests install-time native-library extraction.
 6. The generated package exceeds 80 MB, proving it is the requested bundled-engine APK rather than a small System WebView wrapper.

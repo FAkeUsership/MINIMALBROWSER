@@ -8,7 +8,7 @@ The workflow declares `contents: write`, allowing the repository’s default `GI
 
 ## Publishing
 
-Push a new matching version tag, for example `v1.2.0`. The workflow builds the bundled GeckoView ARM64 APK on GitHub, verifies package contents and checksum, and creates the matching release. Do not overwrite a prior version tag/release for a new version.
+Push a new matching version tag, for example `v1.2.1`. The workflow builds the bundled GeckoView ARM64 APK on GitHub, verifies package contents and checksum, and creates the matching release. Do not overwrite a prior version tag/release for a new version.
 
 If changing the workflow through the GitHub API or with a classic personal access token, the token needs both:
 

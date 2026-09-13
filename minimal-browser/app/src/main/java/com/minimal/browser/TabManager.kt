@@ -494,7 +494,7 @@ object TabManager {
         // This must be assigned before session.open().
         session.contentDelegate = ContentDelegateImpl(tab)
         session.historyDelegate = HistoryDelegateImpl(tab)
-        session.permissionDelegate = PermissionDelegateImpl(tab)
+        session.permissionDelegate = PermissionDelegateImpl()
         session.setContentBlockingDelegate(ContentBlockingDelegateImpl(tab))
     }
 
