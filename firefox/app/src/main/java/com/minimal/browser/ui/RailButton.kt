@@ -1,1 +1,249 @@
-cGFja2FnZSBjb20ubWluaW1hbC5icm93c2VyLnVpCgppbXBvcnQgYW5kcm9pZC5hbmltYXRpb24uVmFsdWVBbmltYXRvcgppbXBvcnQgYW5kcm9pZC5jb250ZW50LkNvbnRleHQKaW1wb3J0IGFuZHJvaWQuZ3JhcGhpY3MuQ2FudmFzCmltcG9ydCBhbmRyb2lkLmdyYXBoaWNzLkNvbG9yCmltcG9ydCBhbmRyb2lkLmdyYXBoaWNzLlBhaW50CmltcG9ydCBhbmRyb2lkLmdyYXBoaWNzLlJlY3RGCmltcG9ydCBhbmRyb2lkLmdyYXBoaWNzLlR5cGVmYWNlCmltcG9ydCBhbmRyb2lkLm9zLkJ1aWxkCmltcG9ydCBhbmRyb2lkLm9zLlZpYnJhdGlvbkVmZmVjdAppbXBvcnQgYW5kcm9pZC5vcy5WaWJyYXRvcgppbXBvcnQgYW5kcm9pZC5vcy5WaWJyYXRvck1hbmFnZXIKaW1wb3J0IGFuZHJvaWQudXRpbC5UeXBlZFZhbHVlCmltcG9ydCBhbmRyb2lkLnZpZXcuR3Jhdml0eQppbXBvcnQgYW5kcm9pZC52aWV3Lk1vdGlvbkV2ZW50CmltcG9ydCBhbmRyb2lkLnZpZXcuVmlld0NvbmZpZ3VyYXRpb24KaW1wb3J0IGFuZHJvaWQud2lkZ2V0LkltYWdlVmlldwppbXBvcnQgYW5kcm9pZC53aWRnZXQuTGluZWFyTGF5b3V0CmltcG9ydCBhbmRyb2lkLndpZGdldC5UZXh0VmlldwppbXBvcnQgYW5kcm9pZHguYW5ub3RhdGlvbi5EcmF3YWJsZVJlcwppbXBvcnQgY29tLm1pbmltYWwuYnJvd3Nlci5QcmVmcwppbXBvcnQgY29tLm1pbmltYWwuYnJvd3Nlci5SCgovKioKICogT25lIGJ1dHRvbiBpbiB0aGUgbGVmdCByYWlsIOKAlCBwb3J0IG9mIGAucmJ0bmAgZnJvbSB0aGUgSFRNTC4KICoKICogVGFwID0gbmF2aWdhdGUuIE9uIHRoZSBXZWIgYnV0dG9uLCAqaG9sZGluZyogaXQgZm9yIFtQcmVmcy5ob2xkU2Vjb25kc10KICogKDVzIGJ5IGRlZmF1bHQpIGZpbGxzIHRoZSBwcm9ncmVzcyByaW5nIGFuZCB0b2dnbGVzIGZ1bGwgc2NyZWVuLgogKi8KY2xhc3MgUmFpbEJ1dHRvbigKICAgIGNvbnRleHQ6IENvbnRleHQsCiAgICBARHJhd2FibGVSZXMgaWNvblJlczogSW50LAogICAgbGFiZWw6IFN0cmluZywKICAgIHZhbCBzdXBwb3J0c0hvbGQ6IEJvb2xlYW4gPSBmYWxzZQopIDogTGluZWFyTGF5b3V0KGNvbnRleHQpIHsKCiAgICB2YXIgb25UYXA6ICgoKSAtPiBVbml0KT8gPSBudWxsCiAgICB2YXIgb25Ib2xkUHJvZ3Jlc3NTdGFydDogKCgpIC0+IFVuaXQpPyA9IG51bGwKICAgIHZhciBvbkhvbGRDb21wbGV0ZTogKCgpIC0+IFVuaXQpPyA9IG51bGwKCiAgICBwcml2YXRlIHZhbCBpY29uID0gSW1hZ2VWaWV3KGNvbnRleHQpCiAgICBwcml2YXRlIHZhbCB0ZXh0ID0gVGV4dFZpZXcoY29udGV4dCkKCiAgICBwcml2YXRlIHZhciBhY3RpdmUgPSBmYWxzZQogICAgcHJpdmF0ZSB2YXIgYW5pbWF0b3I6IFZhbHVlQW5pbWF0b3I/ID0gbnVsbAogICAgcHJpdmF0ZSB2YXIgaG9sZFByb2dyZXNzID0gMGYKICAgIHByaXZhdGUgdmFyIHNob3dpbmdSaW5nID0gZmFsc2UKICAgIHByaXZhdGUgdmFyIGhvbGRGaXJlZCA9IGZhbHNlCiAgICBwcml2YXRlIHZhciBkb3duWCA9IDBmCiAgICBwcml2YXRlIHZhciBkb3duWSA9IDBmCiAgICBwcml2YXRlIHZhbCB0b3VjaFNsb3AgPSBWaWV3Q29uZmlndXJhdGlvbi5nZXQoY29udGV4dCkuc2NhbGVkVG91Y2hTbG9wCgogICAgcHJpdmF0ZSB2YWwgcmluZ1BhaW50ID0gUGFpbnQoUGFpbnQuQU5USV9BTElBU19GTEFHKS5hcHBseSB7CiAgICAgICAgc3R5bGUgPSBQYWludC5TdHlsZS5TVFJPS0UKICAgICAgICBzdHJva2VXaWR0aCA9IGNvbnRleHQuZHAoMi41ZikKICAgICAgICBzdHJva2VDYXAgPSBQYWludC5DYXAuUk9VTkQKICAgICAgICBjb2xvciA9IENvbG9yLldISVRFCiAgICB9CiAgICBwcml2YXRlIHZhbCByaW5nUmVjdCA9IFJlY3RGKCkKCiAgICBpbml0IHsKICAgICAgICBvcmllbnRhdGlvbiA9IFZFUlRJQ0FMCiAgICAgICAgZ3Jhdml0eSA9IEdyYXZpdHkuQ0VOVEVSCiAgICAgICAgaXNDbGlja2FibGUgPSB0cnVlCiAgICAgICAgaXNGb2N1c2FibGUgPSB0cnVlCgogICAgICAgIGljb24uc2V0SW1hZ2VSZXNvdXJjZShpY29uUmVzKQogICAgICAgIGFkZFZpZXcoaWNvbiwgTGF5b3V0UGFyYW1zKGNvbnRleHQuZHAoMjApLCBjb250ZXh0LmRwKDIwKSkpCgogICAgICAgIHRleHQudGV4dCA9IGxhYmVsCiAgICAgICAgdGV4dC5zZXRUZXh0U2l6ZShUeXBlZFZhbHVlLkNPTVBMRVhfVU5JVF9TUCwgOWYpCiAgICAgICAgdGV4dC5ncmF2aXR5ID0gR3Jhdml0eS5DRU5URVIKICAgICAgICAodGV4dC5sYXlvdXRQYXJhbXMgYXM/IExheW91dFBhcmFtcyk/LmxldCB7fQogICAgICAgIGFkZFZpZXcodGV4dCwgTGF5b3V0UGFyYW1zKExheW91dFBhcmFtcy5XUkFQX0NPTlRFTlQsIExheW91dFBhcmFtcy5XUkFQX0NPTlRFTlQpLmFwcGx5IHsKICAgICAgICAgICAgdG9wTWFyZ2luID0gY29udGV4dC5kcCgyKQogICAgICAgIH0pCgogICAgICAgIHNldFdpbGxOb3REcmF3KGZhbHNlKQogICAgICAgIGFwcGx5U3R5bGUoKQogICAgfQoKICAgIC8qIC0tLS0tLS0tLS0tLS0tLS0gc3R5bGluZyAoLnJidG4gLyAucmJ0bi5hY3RpdmUpIC0tLS0tLS0tLS0tLS0tLS0gKi8KCiAgICBmdW4gc2V0QWN0aXZlKHZhbHVlOiBCb29sZWFuKSB7CiAgICAgICAgaWYgKGFjdGl2ZSA9PSB2YWx1ZSkgcmV0dXJuCiAgICAgICAgYWN0aXZlID0gdmFsdWUKICAgICAgICBhcHBseVN0eWxlKCkKICAgIH0KCiAgICBmdW4gaXNBY3RpdmUoKSA9IGFjdGl2ZQoKICAgIHByaXZhdGUgZnVuIGFwcGx5U3R5bGUoKSB7CiAgICAgICAgdmFsIGZnID0gaWYgKGFjdGl2ZSkgSW5rLkJMQUNLIGVsc2UgSW5rLk1VVEVECiAgICAgICAgYmFja2dyb3VuZCA9IGlmIChhY3RpdmUpIGNvbnRleHQucm91bmRSZWN0KDEyLCBDb2xvci5XSElURSkgZWxzZSBudWxsCiAgICAgICAgaWNvbi5pY29uKGljb25EcmF3YWJsZSgpLCBmZykKICAgICAgICB0ZXh0LnNldFRleHRDb2xvcihmZykKICAgICAgICB0ZXh0LnNldFR5cGVmYWNlKHRleHQudHlwZWZhY2UsIGlmIChhY3RpdmUpIFR5cGVmYWNlLkJPTEQgZWxzZSBUeXBlZmFjZS5OT1JNQUwpCiAgICB9CgogICAgQERyYXdhYmxlUmVzCiAgICBwcml2YXRlIHZhciBpY29uUmVzQ2FjaGVkOiBJbnQgPSAwCgogICAgcHJpdmF0ZSBmdW4gaWNvbkRyYXdhYmxlKCk6IEludCA9CiAgICAgICAgaWYgKGljb25SZXNDYWNoZWQgIT0gMCkgaWNvblJlc0NhY2hlZCBlbHNlIFIuZHJhd2FibGUuaWNfZ2xvYmUKCiAgICAvKiogUmVtZW1iZXIgdGhlIGljb24gc28gcmUtdGludGluZyBvbiBhY3RpdmUvaW5hY3RpdmUgaXMgY2hlYXAuICovCiAgICBmdW4gcmVtZW1iZXJJY29uKEBEcmF3YWJsZVJlcyByZXM6IEludCkgewogICAgICAgIGljb25SZXNDYWNoZWQgPSByZXMKICAgICAgICBhcHBseVN0eWxlKCkKICAgIH0KCiAgICAvKiAtLS0tLS0tLS0tLS0tLS0tIGhvbGQtdG8tZnVsbC1zY3JlZW4gcmluZyAtLS0tLS0tLS0tLS0tLS0tICovCgogICAgcHJpdmF0ZSBmdW4gc3RhcnRIb2xkKCkgewogICAgICAgIGlmICghc3VwcG9ydHNIb2xkKSByZXR1cm4KICAgICAgICBzaG93aW5nUmluZyA9IHRydWUKICAgICAgICBob2xkRmlyZWQgPSBmYWxzZQogICAgICAgIGhvbGRQcm9ncmVzcyA9IDBmCiAgICAgICAgb25Ib2xkUHJvZ3Jlc3NTdGFydD8uaW52b2tlKCkKICAgICAgICBhbmltYXRvcj8uY2FuY2VsKCkKICAgICAgICBhbmltYXRvciA9IFZhbHVlQW5pbWF0b3Iub2ZGbG9hdCgwZiwgMWYpLmFwcGx5IHsKICAgICAgICAgICAgZHVyYXRpb24gPSBQcmVmcy5ob2xkTWlsbGlzCiAgICAgICAgICAgIGFkZFVwZGF0ZUxpc3RlbmVyIHsKICAgICAgICAgICAgICAgIGhvbGRQcm9ncmVzcyA9IGl0LmFuaW1hdGVkRnJhY3Rpb24KICAgICAgICAgICAgICAgIGludmFsaWRhdGUoKQogICAgICAgICAgICB9CiAgICAgICAgICAgIHN0YXJ0KCkKICAgICAgICB9CiAgICAgICAgYW5pbWF0b3I/LmRvT25FbmRHdWFyZGVkIHsKICAgICAgICAgICAgc2hvd2luZ1JpbmcgPSBmYWxzZQogICAgICAgICAgICBob2xkRmlyZWQgPSB0cnVlCiAgICAgICAgICAgIGhvbGRQcm9ncmVzcyA9IDBmCiAgICAgICAgICAgIGludmFsaWRhdGUoKQogICAgICAgICAgICB2aWJyYXRlKCkKICAgICAgICAgICAgb25Ib2xkQ29tcGxldGU/Lmludm9rZSgpCiAgICAgICAgfQogICAgfQoKICAgIHByaXZhdGUgZnVuIGNhbmNlbEhvbGQoKSB7CiAgICAgICAgYW5pbWF0b3I/LmNhbmNlbCgpCiAgICAgICAgYW5pbWF0b3IgPSBudWxsCiAgICAgICAgaWYgKHNob3dpbmdSaW5nKSB7CiAgICAgICAgICAgIHNob3dpbmdSaW5nID0gZmFsc2UKICAgICAgICAgICAgaG9sZFByb2dyZXNzID0gMGYKICAgICAgICAgICAgaW52YWxpZGF0ZSgpCiAgICAgICAgfQogICAgfQoKICAgIHByaXZhdGUgZnVuIHZpYnJhdGUoKSB7CiAgICAgICAgdmFsIHY6IFZpYnJhdG9yPyA9IGlmIChCdWlsZC5WRVJTSU9OLlNES19JTlQgPj0gQnVpbGQuVkVSU0lPTl9DT0RFUy5TKSB7CiAgICAgICAgICAgIChjb250ZXh0LmdldFN5c3RlbVNlcnZpY2UoQ29udGV4dC5WSUJSQVRPUl9NQU5BR0VSX1NFUlZJQ0UpIGFzPyBWaWJyYXRvck1hbmFnZXIpPy5kZWZhdWx0VmlicmF0b3IKICAgICAgICB9IGVsc2UgewogICAgICAgICAgICBAU3VwcHJlc3MoIkRFUFJFQ0FUSU9OIikKICAgICAgICAgICAgY29udGV4dC5nZXRTeXN0ZW1TZXJ2aWNlKENvbnRleHQuVklCUkFUT1JfU0VSVklDRSkgYXM/IFZpYnJhdG9yCiAgICAgICAgfQogICAgICAgIHRyeSB7CiAgICAgICAgICAgIGlmIChCdWlsZC5WRVJTSU9OLlNES19JTlQgPj0gQnVpbGQuVkVSU0lPTl9DT0RFUy5PKSB7CiAgICAgICAgICAgICAgICB2Py52aWJyYXRlKFZpYnJhdGlvbkVmZmVjdC5jcmVhdGVPbmVTaG90KDE4LCBWaWJyYXRpb25FZmZlY3QuREVGQVVMVF9BTVBMSVRVREUpKQogICAgICAgICAgICB9IGVsc2UgewogICAgICAgICAgICAgICAgQFN1cHByZXNzKCJERVBSRUNBVElPTiIpCiAgICAgICAgICAgICAgICB2Py52aWJyYXRlKDE4KQogICAgICAgICAgICB9CiAgICAgICAgfSBjYXRjaCAoXzogRXhjZXB0aW9uKSB7CiAgICAgICAgfQogICAgfQoKICAgIG92ZXJyaWRlIGZ1biBvbkRyYXcoY2FudmFzOiBDYW52YXMpIHsKICAgICAgICBzdXBlci5vbkRyYXcoY2FudmFzKQogICAgICAgIGlmICghc2hvd2luZ1JpbmcgfHwgaG9sZFByb2dyZXNzIDw9IDBmKSByZXR1cm4KICAgICAgICAvLyA1NGRwIHJpbmcgY2VudHJlZCBvbiB0aGUgYnV0dG9uLCBzdGFydGluZyBhdCAxMiBvJ2Nsb2NrIChIVE1MIHJvdGF0ZXMgLTkwZGVnKQogICAgICAgIHZhbCByID0gY29udGV4dC5kcCgyN2YpCiAgICAgICAgdmFsIGN4ID0gd2lkdGggLyAyZgogICAgICAgIHZhbCBjeSA9IGhlaWdodCAvIDJmCiAgICAgICAgcmluZ1JlY3Quc2V0KGN4IC0gciwgY3kgLSByLCBjeCArIHIsIGN5ICsgcikKICAgICAgICBjYW52YXMuc2F2ZSgpCiAgICAgICAgY2FudmFzLnJvdGF0ZSgtOTBmLCBjeCwgY3kpCiAgICAgICAgY2FudmFzLmRyYXdBcmMocmluZ1JlY3QsIDBmLCAzNjBmICogaG9sZFByb2dyZXNzLCBmYWxzZSwgcmluZ1BhaW50KQogICAgICAgIGNhbnZhcy5yZXN0b3JlKCkKICAgIH0KCiAgICAvKiAtLS0tLS0tLS0tLS0tLS0tIHRvdWNoIGhhbmRsaW5nIC0tLS0tLS0tLS0tLS0tLS0gKi8KCiAgICBvdmVycmlkZSBmdW4gb25Ub3VjaEV2ZW50KGV2ZW50OiBNb3Rpb25FdmVudCk6IEJvb2xlYW4gewogICAgICAgIHdoZW4gKGV2ZW50LmFjdGlvbk1hc2tlZCkgewogICAgICAgICAgICBNb3Rpb25FdmVudC5BQ1RJT05fRE9XTiAtPiB7CiAgICAgICAgICAgICAgICBkb3duWCA9IGV2ZW50LngKICAgICAgICAgICAgICAgIGRvd25ZID0gZXZlbnQueQogICAgICAgICAgICAgICAgc3RhcnRIb2xkKCkKICAgICAgICAgICAgICAgIHJldHVybiB0cnVlCiAgICAgICAgICAgIH0KCiAgICAgICAgICAgIE1vdGlvbkV2ZW50LkFDVElPTl9NT1ZFIC0+IHsKICAgICAgICAgICAgICAgIGlmIChzaG93aW5nUmluZykgewogICAgICAgICAgICAgICAgICAgIHZhbCBkeCA9IGV2ZW50LnggLSBkb3duWAogICAgICAgICAgICAgICAgICAgIHZhbCBkeSA9IGV2ZW50LnkgLSBkb3duWQogICAgICAgICAgICAgICAgICAgIGlmIChkeCAqIGR4ICsgZHkgKiBkeSA+IHRvdWNoU2xvcCAqIHRvdWNoU2xvcCAqIDRmKSB7CiAgICAgICAgICAgICAgICAgICAgICAgIGNhbmNlbEhvbGQoKQogICAgICAgICAgICAgICAgICAgICAgICByZXR1cm4gdHJ1ZQogICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgIHJldHVybiB0cnVlCiAgICAgICAgICAgIH0KCiAgICAgICAgICAgIE1vdGlvbkV2ZW50LkFDVElPTl9VUCAtPiB7CiAgICAgICAgICAgICAgICB2YWwgd2FzSG9sZGluZyA9IHNob3dpbmdSaW5nCiAgICAgICAgICAgICAgICBjYW5jZWxIb2xkKCkKICAgICAgICAgICAgICAgIC8vIElmIHRoZSByaW5nIGFscmVhZHkgY29tcGxldGVkLCB0aGUgaG9sZCBmaXJlZCBvbkhvbGRDb21wbGV0ZSDigJQgZG8gbm90CiAgICAgICAgICAgICAgICAvLyBhbHNvIGZpcmUgdGhlIHRhcCwgb3IgbGlmdGluZyB0aGUgZmluZ2VyIHJpZ2h0IGFmdGVyIHRoZSA1IHMgaG9sZCB3b3VsZAogICAgICAgICAgICAgICAgLy8gaW1tZWRpYXRlbHkgdW5kbyB0aGUgZnVsbC1zY3JlZW4gdG9nZ2xlLgogICAgICAgICAgICAgICAgaWYgKCF3YXNIb2xkaW5nICYmICFob2xkRmlyZWQpIHBlcmZvcm1DbGljaygpCiAgICAgICAgICAgICAgICBob2xkRmlyZWQgPSBmYWxzZQogICAgICAgICAgICAgICAgcmV0dXJuIHRydWUKICAgICAgICAgICAgfQoKICAgICAgICAgICAgTW90aW9uRXZlbnQuQUNUSU9OX0NBTkNFTCAtPiB7CiAgICAgICAgICAgICAgICBjYW5jZWxIb2xkKCkKICAgICAgICAgICAgICAgIHJldHVybiB0cnVlCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICAgICAgcmV0dXJuIHN1cGVyLm9uVG91Y2hFdmVudChldmVudCkKICAgIH0KCiAgICBvdmVycmlkZSBmdW4gcGVyZm9ybUNsaWNrKCk6IEJvb2xlYW4gewogICAgICAgIHN1cGVyLnBlcmZvcm1DbGljaygpCiAgICAgICAgb25UYXA/Lmludm9rZSgpCiAgICAgICAgcmV0dXJuIHRydWUKICAgIH0KCiAgICBvdmVycmlkZSBmdW4gb25EZXRhY2hlZEZyb21XaW5kb3coKSB7CiAgICAgICAgc3VwZXIub25EZXRhY2hlZEZyb21XaW5kb3coKQogICAgICAgIGFuaW1hdG9yPy5jYW5jZWwoKQogICAgICAgIGFuaW1hdG9yID0gbnVsbAogICAgfQp9CgovKiogU21hbGwgaGVscGVyIHNvIGEgY2FuY2VsbGVkIGFuaW1hdG9yIGRvZXMgbm90IGZpcmUgaXRzIGVuZCBhY3Rpb24uICovCnByaXZhdGUgZnVuIFZhbHVlQW5pbWF0b3IuZG9PbkVuZEd1YXJkZWQoYWN0aW9uOiAoKSAtPiBVbml0KSB7CiAgICBhZGRMaXN0ZW5lcihvYmplY3QgOiBhbmRyb2lkLmFuaW1hdGlvbi5BbmltYXRvckxpc3RlbmVyQWRhcHRlcigpIHsKICAgICAgICBwcml2YXRlIHZhciBjYW5jZWxsZWQgPSBmYWxzZQogICAgICAgIG92ZXJyaWRlIGZ1biBvbkFuaW1hdGlvbkNhbmNlbChhbmltYXRpb246IGFuZHJvaWQuYW5pbWF0aW9uLkFuaW1hdG9yKSB7CiAgICAgICAgICAgIGNhbmNlbGxlZCA9IHRydWUKICAgICAgICB9CgogICAgICAgIG92ZXJyaWRlIGZ1biBvbkFuaW1hdGlvbkVuZChhbmltYXRpb246IGFuZHJvaWQuYW5pbWF0aW9uLkFuaW1hdG9yKSB7CiAgICAgICAgICAgIGlmICghY2FuY2VsbGVkKSBhY3Rpb24oKQogICAgICAgIH0KICAgIH0pCn0K
+package com.minimal.browser.ui
+
+import android.animation.ValueAnimator
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.ViewConfiguration
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.annotation.DrawableRes
+import com.minimal.browser.Prefs
+import com.minimal.browser.R
+
+/**
+ * One button in the left rail — port of `.rbtn` from the HTML.
+ *
+ * Tap = navigate. On the Web button, *holding* it for [Prefs.holdSeconds]
+ * (5s by default) fills the progress ring and toggles full screen.
+ */
+class RailButton(
+    context: Context,
+    @DrawableRes iconRes: Int,
+    label: String,
+    val supportsHold: Boolean = false
+) : LinearLayout(context) {
+
+    var onTap: (() -> Unit)? = null
+    var onHoldProgressStart: (() -> Unit)? = null
+    var onHoldComplete: (() -> Unit)? = null
+
+    private val icon = ImageView(context)
+    private val text = TextView(context)
+
+    private var active = false
+    private var animator: ValueAnimator? = null
+    private var holdProgress = 0f
+    private var showingRing = false
+    private var holdFired = false
+    private var downX = 0f
+    private var downY = 0f
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = context.dp(2.5f)
+        strokeCap = Paint.Cap.ROUND
+        color = Color.WHITE
+    }
+    private val ringRect = RectF()
+
+    init {
+        orientation = VERTICAL
+        gravity = Gravity.CENTER
+        isClickable = true
+        isFocusable = true
+
+        icon.setImageResource(iconRes)
+        addView(icon, LayoutParams(context.dp(20), context.dp(20)))
+
+        text.text = label
+        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
+        text.gravity = Gravity.CENTER
+        (text.layoutParams as? LayoutParams)?.let {}
+        addView(text, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+            topMargin = context.dp(2)
+        })
+
+        setWillNotDraw(false)
+        applyStyle()
+    }
+
+    /* ---------------- styling (.rbtn / .rbtn.active) ---------------- */
+
+    fun setActive(value: Boolean) {
+        if (active == value) return
+        active = value
+        applyStyle()
+    }
+
+    fun isActive() = active
+
+    private fun applyStyle() {
+        val fg = if (active) Ink.BLACK else Ink.MUTED
+        background = if (active) context.roundRect(12, Color.WHITE) else null
+        icon.icon(iconDrawable(), fg)
+        text.setTextColor(fg)
+        text.setTypeface(text.typeface, if (active) Typeface.BOLD else Typeface.NORMAL)
+    }
+
+    @DrawableRes
+    private var iconResCached: Int = 0
+
+    private fun iconDrawable(): Int =
+        if (iconResCached != 0) iconResCached else R.drawable.ic_globe
+
+    /** Remember the icon so re-tinting on active/inactive is cheap. */
+    fun rememberIcon(@DrawableRes res: Int) {
+        iconResCached = res
+        applyStyle()
+    }
+
+    /* ---------------- hold-to-full-screen ring ---------------- */
+
+    private fun startHold() {
+        if (!supportsHold) return
+        showingRing = true
+        holdFired = false
+        holdProgress = 0f
+        onHoldProgressStart?.invoke()
+        animator?.cancel()
+        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = Prefs.holdMillis
+            addUpdateListener {
+                holdProgress = it.animatedFraction
+                invalidate()
+            }
+            start()
+        }
+        animator?.doOnEndGuarded {
+            showingRing = false
+            holdFired = true
+            holdProgress = 0f
+            invalidate()
+            vibrate()
+            onHoldComplete?.invoke()
+        }
+    }
+
+    private fun cancelHold() {
+        animator?.cancel()
+        animator = null
+        if (showingRing) {
+            showingRing = false
+            holdProgress = 0f
+            invalidate()
+        }
+    }
+
+    private fun vibrate() {
+        val v: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                v?.vibrate(VibrationEffect.createOneShot(18, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                v?.vibrate(18)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (!showingRing || holdProgress <= 0f) return
+        // 54dp ring centred on the button, starting at 12 o'clock (HTML rotates -90deg)
+        val r = context.dp(27f)
+        val cx = width / 2f
+        val cy = height / 2f
+        ringRect.set(cx - r, cy - r, cx + r, cy + r)
+        canvas.save()
+        canvas.rotate(-90f, cx, cy)
+        canvas.drawArc(ringRect, 0f, 360f * holdProgress, false, ringPaint)
+        canvas.restore()
+    }
+
+    /* ---------------- touch handling ---------------- */
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                startHold()
+                return true
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (showingRing) {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (dx * dx + dy * dy > touchSlop * touchSlop * 4f) {
+                        cancelHold()
+                        return true
+                    }
+                }
+                return true
+            }
+
+            MotionEvent.ACTION_UP -> {
+                val wasHolding = showingRing
+                cancelHold()
+                // If the ring already completed, the hold fired onHoldComplete — do not
+                // also fire the tap, or lifting the finger right after the 5 s hold would
+                // immediately undo the full-screen toggle.
+                if (!wasHolding && !holdFired) performClick()
+                holdFired = false
+                return true
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                cancelHold()
+                return true
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        onTap?.invoke()
+        return true
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        animator?.cancel()
+        animator = null
+    }
+}
+
+/** Small helper so a cancelled animator does not fire its end action. */
+private fun ValueAnimator.doOnEndGuarded(action: () -> Unit) {
+    addListener(object : android.animation.AnimatorListenerAdapter() {
+        private var cancelled = false
+        override fun onAnimationCancel(animation: android.animation.Animator) {
+            cancelled = true
+        }
+
+        override fun onAnimationEnd(animation: android.animation.Animator) {
+            if (!cancelled) action()
+        }
+    })
+}
