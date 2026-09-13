@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
@@ -105,11 +106,20 @@ class HomeScreen(context: Context) : ScrollView(context) {
             setPadding(0, 0, 0, 0)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             imeOptions = EditorInfo.IME_ACTION_GO
+            UiKeys.configureTextInput(this)
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
                     submit()
                     true
                 } else false
+            }
+            setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_UP && UiKeys.isEnterKey(keyCode)) {
+                    submit()
+                    true
+                } else {
+                    false
+                }
             }
         }
         search.addView(searchField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -229,6 +239,11 @@ class HomeScreen(context: Context) : ScrollView(context) {
             }
         }
         return column
+    }
+
+    /** Re-evaluate soft-input behavior after a physical keyboard changes. */
+    fun refreshInputMode() {
+        UiKeys.configureTextInput(searchField)
     }
 
     /** Called every time the screen becomes visible. */

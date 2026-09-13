@@ -7,6 +7,7 @@ import android.os.Looper
 import android.util.Log
 import android.widget.EditText
 import androidx.annotation.OptIn
+import com.minimal.browser.ui.UiKeys
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.ExperimentalGeckoViewApi
@@ -495,6 +496,64 @@ object TabManager {
         session.permissionDelegate = PermissionDelegateImpl()
         session.setPromptDelegate(BrowserPromptDelegate())
         session.setContentBlockingDelegate(ContentBlockingDelegateImpl(tab))
+        installHardwareAwareTextInputDelegate(session)
+    }
+
+    /**
+     * GeckoView's default delegate directly calls InputMethodManager.showSoftInput
+     * for a focused HTML field. Wrap that existing delegate rather than replacing
+     * it with partial no-op callbacks: this keeps Gecko's normal restart,
+     * selection, extracted-text, and cursor-anchor plumbing intact.
+     */
+    private fun installHardwareAwareTextInputDelegate(session: GeckoSession) {
+        val textInput = session.textInput
+        val defaultDelegate = textInput.delegate
+        textInput.setDelegate(object : GeckoSession.TextInputDelegate {
+            override fun restartInput(session: GeckoSession, reason: Int) {
+                defaultDelegate.restartInput(session, reason)
+            }
+
+            override fun showSoftInput(session: GeckoSession) {
+                val view = session.textInput.view
+                if (view != null && UiKeys.hasHardwareKeyboard(view.context)) {
+                    // Leave GeckoView and the HTML field focused. Only decline the
+                    // software keyboard request so raw physical key events retain
+                    // their normal Gecko delivery path.
+                    UiKeys.hideKeyboard(view, clearFocus = false)
+                } else {
+                    defaultDelegate.showSoftInput(session)
+                }
+            }
+
+            override fun hideSoftInput(session: GeckoSession) {
+                defaultDelegate.hideSoftInput(session)
+            }
+
+            override fun updateSelection(
+                session: GeckoSession,
+                selStart: Int,
+                selEnd: Int,
+                compositionStart: Int,
+                compositionEnd: Int
+            ) {
+                defaultDelegate.updateSelection(session, selStart, selEnd, compositionStart, compositionEnd)
+            }
+
+            override fun updateExtractedText(
+                session: GeckoSession,
+                request: android.view.inputmethod.ExtractedTextRequest,
+                text: android.view.inputmethod.ExtractedText
+            ) {
+                defaultDelegate.updateExtractedText(session, request, text)
+            }
+
+            override fun updateCursorAnchorInfo(
+                session: GeckoSession,
+                info: android.view.inputmethod.CursorAnchorInfo
+            ) {
+                defaultDelegate.updateCursorAnchorInfo(session, info)
+            }
+        })
     }
 
     private fun isCurrent(tab: Tab, session: GeckoSession): Boolean =
@@ -834,6 +893,7 @@ object TabManager {
             val input = EditText(activity).apply {
                 setText(prompt.defaultValue.orEmpty())
                 setSelectAllOnFocus(false)
+                UiKeys.configureTextInput(this)
             }
             return show(prompt) { builder, result ->
                 builder.setTitle(title(prompt.title, "Input"))

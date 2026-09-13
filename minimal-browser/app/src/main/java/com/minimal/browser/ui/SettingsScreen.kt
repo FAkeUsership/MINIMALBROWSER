@@ -6,6 +6,7 @@ import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
@@ -154,6 +155,18 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         section.build().forEach { body.addView(it) }
     }
 
+    /** Update any currently-rendered custom text control after device changes. */
+    fun refreshInputMode() = refreshTextInputs(this)
+
+    private fun refreshTextInputs(view: View) {
+        when (view) {
+            is EditText -> UiKeys.configureTextInput(view)
+            is ViewGroup -> for (index in 0 until view.childCount) {
+                refreshTextInputs(view.getChildAt(index))
+            }
+        }
+    }
+
     private fun descriptionFor(index: Int) = when (index) {
         0 -> "Make the browser look the way you like. Less is more."
         1 -> "Everything is blocked before the request leaves the device."
@@ -180,6 +193,18 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
             R.drawable.ic_back,
             "Android Back or double-tap the page",
             "Restores the normal browser controls and normal Android system bars."
+        )
+
+        out += group("Keyboard & mouse")
+        out += infoRow(
+            R.drawable.ic_search,
+            "External keyboard",
+            "A connected USB or Bluetooth keyboard keeps the Android on-screen keyboard hidden. Enter and numpad Enter submit a search or address."
+        )
+        out += infoRow(
+            R.drawable.ic_back,
+            "Desktop-style navigation",
+            "Ctrl+L focuses the address bar; Ctrl+T/W opens or closes a tab; Ctrl+Tab switches tabs; Alt+left/right and mouse side buttons navigate."
         )
 
         out += group("Android system bars")
@@ -537,6 +562,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
             isSingleLine = true
             maxLines = 1
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            UiKeys.configureTextInput(this)
             background = context.getDrawable(R.drawable.bg_sel)
             val pad = context.dp(10)
             setPadding(pad, context.dp(7), pad, context.dp(7))

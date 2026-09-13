@@ -3,6 +3,7 @@ package com.minimal.browser
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.hardware.input.InputManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
@@ -11,6 +12,8 @@ import android.text.InputType
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.widget.EditText
@@ -21,6 +24,7 @@ import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -102,6 +106,15 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private var drawerBookmarkValue = false
     private var drawerBookmarkRequest = 0L
     private var lastDownloadsRefreshAt = 0L
+    private var lastHardwareImeHideAt = 0L
+    private var lastMouseBackAt = 0L
+    private var lastMouseForwardAt = 0L
+    private var inputDeviceListenerRegistered = false
+    private val inputDeviceListener = object : InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(deviceId: Int) = requestInputModeRefresh()
+        override fun onInputDeviceRemoved(deviceId: Int) = requestInputModeRefresh()
+        override fun onInputDeviceChanged(deviceId: Int) = requestInputModeRefresh()
+    }
 
     private enum class Screen { HOME, WEB, TABS, SETTINGS, LIST }
 
@@ -140,6 +153,262 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         })
 
         handleLaunchIntent(intent)
+    }
+
+    /* ================================================================== */
+    /*  external keyboard and mouse                                      */
+    /* ================================================================== */
+
+    /**
+     * Keep normal page typing in GeckoView untouched, but make the familiar
+     * desktop-browser navigation shortcuts work when a physical keyboard is
+     * attached. The address controls themselves also handle plain Enter.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && isMouseKeyEvent(event)) {
+            // Android may synthesize these KeyEvents in addition to a mouse
+            // ACTION_BUTTON_PRESS. Consume the duplicate, or use it as a
+            // fallback on devices that only send the key event.
+            val now = System.currentTimeMillis()
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_BACK -> {
+                    if (now - lastMouseBackAt > 250L) {
+                        lastMouseBackAt = now
+                        handleBack()
+                    }
+                    return true
+                }
+                KeyEvent.KEYCODE_FORWARD -> {
+                    if (now - lastMouseForwardAt > 250L) {
+                        lastMouseForwardAt = now
+                        TabManager.goForward()
+                    }
+                    return true
+                }
+            }
+        }
+        if (event.action == KeyEvent.ACTION_DOWN && UiKeys.hasHardwareKeyboard(this)) {
+            maybeHideSoftwareKeyboardForHardware()
+        }
+        if (
+            event.action == KeyEvent.ACTION_DOWN &&
+            event.repeatCount == 0 &&
+            UiKeys.hasHardwareKeyboard(this) &&
+            handleKeyboardShortcut(event)
+        ) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    /** Preserve scroll/right-click delivery while supporting mouse side buttons. */
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (isMouseEvent(event) && event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS) {
+            when (event.actionButton) {
+                MotionEvent.BUTTON_BACK -> {
+                    val now = System.currentTimeMillis()
+                    if (now - lastMouseBackAt > 250L) {
+                        lastMouseBackAt = now
+                        handleBack()
+                    }
+                    return true
+                }
+                MotionEvent.BUTTON_FORWARD -> {
+                    val now = System.currentTimeMillis()
+                    if (now - lastMouseForwardAt > 250L) {
+                        lastMouseForwardAt = now
+                        TabManager.goForward()
+                    }
+                    return true
+                }
+            }
+            window.decorView.postDelayed({ maybeHideSoftwareKeyboardForHardware(force = true) }, 90L)
+        }
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    /**
+     * A mouse click (or a touch while a docked keyboard is present) can focus a
+     * page text field and request Android's IME. Hide only the software IME on
+     * the next loop turn; do not clear focus, so physical typing still goes to
+     * the field that was clicked.
+     */
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        val handled = super.dispatchTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_UP && UiKeys.hasHardwareKeyboard(this)) {
+            window.decorView.postDelayed({ maybeHideSoftwareKeyboardForHardware(force = true) }, 90L)
+        }
+        return handled
+    }
+
+    private fun handleKeyboardShortcut(event: KeyEvent): Boolean {
+        if (event.isCtrlPressed) {
+            if (event.keyCode == KeyEvent.KEYCODE_N && event.isShiftPressed) {
+                openTabFromKeyboard(privateTab = true)
+                return true
+            }
+            if (event.keyCode == KeyEvent.KEYCODE_TAB && cycleTabsFromKeyboard(event.isShiftPressed)) {
+                return true
+            }
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_L -> {
+                    focusAddressFromKeyboard()
+                    return true
+                }
+                KeyEvent.KEYCODE_T, KeyEvent.KEYCODE_N -> {
+                    openTabFromKeyboard(privateTab = false)
+                    return true
+                }
+                KeyEvent.KEYCODE_W -> return closeActiveTabFromKeyboard()
+                KeyEvent.KEYCODE_R -> {
+                    if (TabManager.active == null) return false
+                    TabManager.reload()
+                    return true
+                }
+                KeyEvent.KEYCODE_F -> {
+                    if (TabManager.active == null) return false
+                    onFindInPage()
+                    return true
+                }
+                KeyEvent.KEYCODE_H -> {
+                    leaveFullScreenIfNeeded()
+                    drawer.closeImmediately()
+                    showList(ListMode.HISTORY)
+                    return true
+                }
+                KeyEvent.KEYCODE_J -> {
+                    leaveFullScreenIfNeeded()
+                    drawer.closeImmediately()
+                    showList(ListMode.DOWNLOADS)
+                    return true
+                }
+                KeyEvent.KEYCODE_P -> {
+                    if (TabManager.active == null) return false
+                    onPrint()
+                    return true
+                }
+            }
+        }
+
+        if (event.isAltPressed) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> if (TabManager.goBack()) return true
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (TabManager.goForward()) return true
+            }
+        }
+
+        return when (event.keyCode) {
+            KeyEvent.KEYCODE_F5 -> {
+                if (TabManager.active == null) false else {
+                    TabManager.reload()
+                    true
+                }
+            }
+            KeyEvent.KEYCODE_F6, KeyEvent.KEYCODE_SEARCH -> {
+                focusAddressFromKeyboard()
+                true
+            }
+            KeyEvent.KEYCODE_MENU -> {
+                leaveFullScreenIfNeeded()
+                drawer.toggle()
+                true
+            }
+            KeyEvent.KEYCODE_ESCAPE -> when {
+                drawer.isOpen() -> {
+                    drawer.close()
+                    true
+                }
+                webScreen.cancelEditingIfActive() -> true
+                fullScreen -> {
+                    exitPageOnly()
+                    true
+                }
+                else -> false
+            }
+            else -> false
+        }
+    }
+
+    private fun focusAddressFromKeyboard() {
+        leaveFullScreenIfNeeded()
+        drawer.closeImmediately()
+        show(Screen.WEB)
+        webScreen.focusAddress()
+    }
+
+    private fun openTabFromKeyboard(privateTab: Boolean) {
+        leaveFullScreenIfNeeded()
+        drawer.closeImmediately()
+        if (openNewTabSafely(null, privateTab) == null) return
+        show(Screen.WEB)
+        if (privateTab) toast.say("Private tab — nothing will be recorded")
+        webScreen.focusAddress()
+    }
+
+    private fun cycleTabsFromKeyboard(backward: Boolean): Boolean {
+        val tabs = TabManager.tabs
+        if (tabs.size < 2) return false
+        val currentIndex = tabs.indexOf(TabManager.active).coerceAtLeast(0)
+        val nextIndex = if (backward) {
+            (currentIndex - 1 + tabs.size) % tabs.size
+        } else {
+            (currentIndex + 1) % tabs.size
+        }
+        TabManager.switchTo(tabs[nextIndex])
+        show(Screen.WEB)
+        return true
+    }
+
+    private fun closeActiveTabFromKeyboard(): Boolean {
+        val tab = TabManager.active ?: return false
+        TabManager.close(tab)
+        if (TabManager.tabs.isEmpty()) show(Screen.HOME) else show(Screen.WEB)
+        return true
+    }
+
+    private fun isMouseEvent(event: MotionEvent): Boolean =
+        (event.source and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
+
+    private fun isMouseKeyEvent(event: KeyEvent): Boolean =
+        (event.source and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
+
+    private fun maybeHideSoftwareKeyboardForHardware(force: Boolean = false) {
+        if (!UiKeys.hasHardwareKeyboard(this)) return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastHardwareImeHideAt < 300L) return
+        lastHardwareImeHideAt = now
+        UiKeys.hideKeyboard(window.decorView, clearFocus = false)
+    }
+
+    /** Input-device configuration changes are inconsistent across OEMs. */
+    private fun requestInputModeRefresh() {
+        runOnUiThread {
+            if (
+                isFinishing ||
+                isDestroyed ||
+                !this::homeScreen.isInitialized ||
+                !this::webScreen.isInitialized ||
+                !this::settingsScreen.isInitialized
+            ) return@runOnUiThread
+            homeScreen.refreshInputMode()
+            webScreen.refreshInputMode()
+            settingsScreen.refreshInputMode()
+            maybeHideSoftwareKeyboardForHardware(force = true)
+        }
+    }
+
+    private fun registerInputDeviceListener() {
+        if (inputDeviceListenerRegistered) return
+        val manager = getSystemService(Context.INPUT_SERVICE) as? InputManager ?: return
+        manager.registerInputDeviceListener(inputDeviceListener, null)
+        inputDeviceListenerRegistered = true
+    }
+
+    private fun unregisterInputDeviceListener() {
+        if (!inputDeviceListenerRegistered) return
+        (getSystemService(Context.INPUT_SERVICE) as? InputManager)
+            ?.unregisterInputDeviceListener(inputDeviceListener)
+        inputDeviceListenerRegistered = false
     }
 
     private fun buildUi(): View {
@@ -204,6 +473,16 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             bottomMargin = dp(18)
         })
+
+        // Gecko may request the IME after a page field gains focus. Native
+        // chrome inputs opt out themselves; this insets safety net covers the
+        // engine-owned field without taking focus away from it.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            if (UiKeys.hasHardwareKeyboard(this) && insets.isVisible(WindowInsetsCompat.Type.ime())) {
+                view.post { maybeHideSoftwareKeyboardForHardware() }
+            }
+            insets
+        }
 
         return root
     }
@@ -1013,8 +1292,9 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             setTextColor(Color.BLACK)
             setHintTextColor(0xFF8A8A8A.toInt())
             isSingleLine = true
+            UiKeys.configureTextInput(this)
         }
-        AlertDialog.Builder(this, R.style.Theme_Minimal_Dialog)
+        val dialog = AlertDialog.Builder(this, R.style.Theme_Minimal_Dialog)
             .setTitle("Find in page")
             .setView(field)
             .setNegativeButton("Clear") { _, _ -> TabManager.clearFind() }
@@ -1024,7 +1304,12 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             .setPositiveButton("Find") { _, _ ->
                 TabManager.findInPage(field.text?.toString().orEmpty())
             }
-            .show()
+            .create()
+        dialog.setOnShowListener {
+            field.requestFocus()
+            UiKeys.showKeyboard(field)
+        }
+        dialog.show()
     }
 
     /* ================================================================== */
@@ -1159,15 +1444,18 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     override fun onResume() {
         super.onResume()
+        registerInputDeviceListener()
         if (current == Screen.WEB && ensureBrowserReady()) {
             attachActiveTabToVisibleView(TabManager.active)
             TabManager.resumeActive()
         }
         applySystemUi()
+        requestInputModeRefresh()
         homeScreen.refresh()
     }
 
     override fun onPause() {
+        unregisterInputDeviceListener()
         TabManager.persist()
         TabManager.pauseActive()
         TabManager.detach()
@@ -1176,6 +1464,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     override fun onDestroy() {
+        unregisterInputDeviceListener()
         TabManager.detach()
         webScreen.detachGeckoView()
         TabManager.host = null
@@ -1194,5 +1483,6 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         // the long-lived bundled runtime instead of recreating native sessions.
         runCatching { BrowserApp.runtime?.configurationChanged(newConfig) }
             .onFailure { Log.w("MinimalBrowser", "could not update Gecko configuration", it) }
+        requestInputModeRefresh()
     }
 }

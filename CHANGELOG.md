@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.6 — External keyboard and mouse support
+
+- Detects connected physical keyboards from Android configuration **and** the active input-device list, then refreshes native input behavior when a USB/Bluetooth keyboard is added, removed, or changes. Home search, the omnibox, Settings text rows, and Gecko prompt text controls no longer explicitly request Android’s software keyboard while a physical keyboard is available.
+- Protects engine-owned page fields too: each Gecko session wraps GeckoView’s default text-input delegate, declines `showSoftInput` while a hardware keyboard is present, and still forwards Gecko’s restart/selection/extracted-text/cursor plumbing to that default delegate. Touch/insets suppression is retained as an OEM safety net. The shell hides only the software IME without clearing the focused Gecko field, so physical typing remains delivered to that field.
+- Makes both physical **Enter** and numpad **Enter** submit Home search and the omnibox. The omnibox consumes a duplicate editor/key callback so a query or URL starts only once.
+- Adds desktop-style browser shortcuts while preserving ordinary page key delivery: `Ctrl+L`/`F6` address, `Ctrl+T` normal tab, `Ctrl+Shift+N` private tab, `Ctrl+W` close, `Ctrl+Tab`/`Ctrl+Shift+Tab` switch tabs, `Ctrl+R`/`F5` reload, `Ctrl+F` find, `Ctrl+H` history, `Ctrl+J` Downloads, `Ctrl+P` print, `Alt+Left`/`Alt+Right` navigation, and the keyboard Menu key for the drawer.
+- Keeps mouse click, context-click, and scroll-wheel input on Gecko’s normal path, and maps mouse Back/Forward side buttons to browser navigation. Android can emit both a mouse button event and a synthesized key event for those buttons; the shell de-duplicates the pair so one press produces one navigation action.
+- The source behavior is GitHub Actions compiled and package-verified before release. It still requires physical Android validation with real USB and Bluetooth keyboards/mice; an artifact check cannot prove an OEM’s IME, HID, or Bluetooth routing behavior.
+
 ## v1.2.5 — Real browser menu, downloads, and new-tab polish
 
 - Fixes the actual three-dot menu defect: the full-screen drawer container was translated 330dp off-screen instead of just its panel. That left only a thin semi-black strip on the right, making the already-wired menu actions appear missing. The drawer now visibly opens as a right-side panel with its tap-to-close scrim.

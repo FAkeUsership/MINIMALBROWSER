@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.2.5)'
+        description: 'Release tag to create or update (for example: v1.2.6)'
         required: true
-        default: 'v1.2.5'
+        default: 'v1.2.6'
         type: string
       publish_release:
         description: 'Publish release assets after verification (disable for a GitHub Actions validation run)'
@@ -85,7 +85,7 @@ jobs:
           unzip -t "$APK" >/dev/null
           "$APKSIGNER" verify --verbose "$APK"
           "$AAPT2" dump badging "$APK" | tee /tmp/minimal-browser-badging.txt
-          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.5'" /tmp/minimal-browser-badging.txt
+          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.6'" /tmp/minimal-browser-badging.txt
           # Assert against the generated APK, rather than source, that it is a
           # non-debuggable release process even though it is debug-key-signed.
           ! grep -Eq '^application-debuggable' /tmp/minimal-browser-badging.txt
@@ -127,7 +127,7 @@ jobs:
             v*) ;;
             *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
           esac
-          NOTES="Minimal Browser $TAG is a signed, non-debuggable Android release variant with the bundled Mozilla GeckoView ARM64 engine. It retains GeckoView's initialized default SurfaceView rather than resetting it, preserving the v1.2.3 black-screen correction. v1.2.5 fixes the three-dot menu itself: the full-screen drawer was translated off-screen instead of only its right panel, which left a thin dark strip and hid real menu actions. The working menu includes new normal/private tabs, tabs, history, bookmarks, Downloads, shields, Find in page, sharing, printing, and Settings. Download links now show an explicit file/type/size/source confirmation, copy Gecko's already-authorized response stream into Android Downloads, show live progress in the Downloads screen, record only successfully published files, and open completed files from the list. New blank tabs have a responsive native start/search surface instead of an empty white page, while the omnibox opens empty and retains the full editable URL. Appearance now includes a Hide Android status bar setting; page-only still hides both bars after the required five-second Web hold and one Android Back or page double-tap restores it. OAuth/consent compatibility, default ETP, local blocking, performance reductions, and the ARM64-only bundled engine remain. The release verifies APK signature, package ID, version, non-debuggable process flag, ARM64-only native code, libxul.so, install-time native extraction, checksum, and a substantial bundled-engine artifact. The disposable-runner debug certificate is not a durable update identity, so export data and uninstall an older differently signed build if Android rejects the update. SHA256SUMS.txt verifies the APK. App ID: com.minimal.browser."
+          NOTES="Minimal Browser $TAG is a signed, non-debuggable Android release variant with the bundled Mozilla GeckoView ARM64 engine. v1.2.6 adds practical physical keyboard and mouse handling: when Android reports a USB/Bluetooth hardware keyboard, native address, Home, Settings, and prompt fields do not request the software IME; dynamic input-device/configuration changes refresh that behavior; and a Gecko text-input delegate declines an IME request for an engine-owned page field without clearing the page field's focus. Physical Enter and numpad Enter submit the address and Home search fields once. Familiar browser shortcuts are source-implemented: Ctrl+L/F6 address, Ctrl+T normal tab, Ctrl+Shift+N private tab, Ctrl+W close, Ctrl+Tab switch, Ctrl+R/F5 reload, Ctrl+F find, Ctrl+H history, Ctrl+J Downloads, Ctrl+P print, Alt+left/right history navigation, plus the keyboard Menu key. Ordinary page keys, clicks, right-clicks, and scroll-wheel input continue to Gecko; mouse Back/Forward side buttons navigate with Android key-event duplicate protection. The established working drawer, private tabs, confirmed stream-based Android Downloads, native blank-tab search surface, status-bar preference, page-only five-second hold, OAuth/consent compatibility, default ETP, local blocking, performance reductions, and ARM64-only bundled engine remain. The release verifies APK signature, package ID, version, non-debuggable process flag, ARM64-only native code, libxul.so, install-time native extraction, checksum, and a substantial bundled-engine artifact. GitHub compilation/package verification is not physical USB/Bluetooth keyboard and mouse validation; test those devices after installation. The disposable-runner debug certificate is not a durable update identity, so export data and uninstall an older differently signed build if Android rejects the update. SHA256SUMS.txt verifies the APK. App ID: com.minimal.browser."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else

@@ -30,6 +30,7 @@ The Gradle configuration intentionally packages only `arm64-v8a`. The resulting 
 - Shield events are coalesced into short UI/database batches on one low-priority worker; ordinary tab restore stores URLs/titles only. Private tabs are excluded.
 - The three-dot drawer is a real right-side menu (not a decorative strip), with normal/private tabs, library actions, Downloads, Find in page, privacy controls, sharing, printing, and Settings.
 - A download is confirmed before start, writes GeckoView's original authorized stream to Android Downloads, and becomes an openable library entry only after the completed file is published. Private-tab downloads are not retained in the app list.
+- Physical USB/Bluetooth keyboard detection combines configuration and `InputManager` device callbacks. Native text fields opt out of a forced software IME while hardware input is attached; page-field IME requests are dismissed without clearing focus. Enter/numpad Enter, standard browser chords, and mouse Back/Forward side buttons are handled at the Activity boundary, while ordinary Gecko keyboard/mouse input is passed through.
 - `onCrash` and `onKill` replace only the affected session and reload its last URL.
 
 ## Page-only mode

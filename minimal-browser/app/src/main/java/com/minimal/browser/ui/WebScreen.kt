@@ -1,12 +1,15 @@
 package com.minimal.browser.ui
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.text.InputType
 import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.Gravity
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -16,6 +19,8 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.minimal.browser.R
 import com.minimal.browser.Tab
 import com.minimal.browser.UrlBar
@@ -244,6 +249,7 @@ class WebScreen(context: Context) : LinearLayout(context) {
             setPadding(0, 0, 0, 0)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             imeOptions = EditorInfo.IME_ACTION_GO
+            UiKeys.configureTextInput(this)
             hint = ADDRESS_PLACEHOLDER
             // The visible idle label is a hint, not text the person should have
             // to erase. Keep the full URL separately too: the compact chrome
@@ -256,6 +262,14 @@ class WebScreen(context: Context) : LinearLayout(context) {
                     true
                 } else false
             }
+            setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_UP && UiKeys.isEnterKey(keyCode)) {
+                    commit(this.text?.toString().orEmpty())
+                    true
+                } else {
+                    false
+                }
+            }
         }
         addressPill.addView(input, index, LayoutParams(0, LayoutParams.WRAP_CONTENT).apply { weight = 1f })
         input.requestFocus()
@@ -263,6 +277,9 @@ class WebScreen(context: Context) : LinearLayout(context) {
     }
 
     private fun commit(raw: String) {
+        // A physical Enter can reach both the IME editor action and a key
+        // listener. Complete the navigation once, never twice.
+        if (!editing) return
         editing = false
         UiKeys.hideKeyboard(this)
         val index = addressPill.indexOfChild(findEditText())
@@ -288,6 +305,21 @@ class WebScreen(context: Context) : LinearLayout(context) {
     fun cancelPendingNavigation() {
         navigationPending = false
         updateStartPanel()
+    }
+
+    /** Opens the omnibox for Ctrl+L/F6 and the native blank-tab search card. */
+    fun focusAddress() = beginEditing()
+
+    /** @return true when Escape closed an active address edit. */
+    fun cancelEditingIfActive(): Boolean {
+        if (!editing) return false
+        cancelEditing()
+        return true
+    }
+
+    /** Re-evaluate IME behavior after a hardware keyboard is plugged/unplugged. */
+    fun refreshInputMode() {
+        findEditText()?.let { UiKeys.configureTextInput(it) }
     }
 
     /** Called when full screen ends so a stuck editor does not survive. */
@@ -488,20 +520,51 @@ class WebScreen(context: Context) : LinearLayout(context) {
     }
 }
 
-/** Small IME helper so the address bar behaves like a real one. */
+/**
+ * IME and keyboard helpers shared by the native browser chrome.
+ *
+ * Android normally decides whether to show its software keyboard for a physical
+ * keyboard. The old shell overrode that decision and always forced the IME
+ * after focusing the omnibox, which made a docked/BT keyboard feel broken.
+ */
 object UiKeys {
+    fun hasHardwareKeyboard(context: Context): Boolean {
+        val configured = context.resources.configuration.keyboard
+        if (configured == Configuration.KEYBOARD_QWERTY || configured == Configuration.KEYBOARD_12KEY) {
+            return true
+        }
+        return InputDevice.getDeviceIds().any { id ->
+            val device = InputDevice.getDevice(id) ?: return@any false
+            !device.isVirtual &&
+                device.keyboardType != InputDevice.KEYBOARD_TYPE_NONE &&
+                (device.sources and InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD
+        }
+    }
+
+    fun configureTextInput(input: EditText) {
+        input.showSoftInputOnFocus = !hasHardwareKeyboard(input.context)
+    }
+
+    fun isEnterKey(keyCode: Int): Boolean =
+        keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+
     fun showKeyboard(view: View) {
+        if (hasHardwareKeyboard(view.context)) return
         view.postDelayed({
+            if (hasHardwareKeyboard(view.context)) return@postDelayed
             val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
                 as? android.view.inputmethod.InputMethodManager
             imm?.showSoftInput(view, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
         }, 60)
     }
 
-    fun hideKeyboard(view: View) {
+    fun hideKeyboard(view: View, clearFocus: Boolean = true) {
+        // InsetsController is the current API; the InputMethodManager fallback
+        // covers older OEM implementations and views not yet fully attached.
+        ViewCompat.getWindowInsetsController(view)?.hide(WindowInsetsCompat.Type.ime())
         val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
             as? android.view.inputmethod.InputMethodManager
         imm?.hideSoftInputFromWindow(view.windowToken, 0)
-        view.clearFocus()
+        if (clearFocus) view.clearFocus()
     }
 }
