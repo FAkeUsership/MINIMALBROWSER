@@ -174,7 +174,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                 KeyEvent.KEYCODE_BACK -> {
                     if (now - lastMouseBackAt > 250L) {
                         lastMouseBackAt = now
-                        handleBack()
+                        handleMouseBack()
                     }
                     return true
                 }
@@ -209,7 +209,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                     val now = System.currentTimeMillis()
                     if (now - lastMouseBackAt > 250L) {
                         lastMouseBackAt = now
-                        handleBack()
+                        handleMouseBack()
                     }
                     return true
                 }
@@ -763,6 +763,29 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /* ================================================================== */
     /*  back handling                                                      */
     /* ================================================================== */
+
+    /** Mouse side-Back follows browser navigation and never closes the app. */
+    private fun handleMouseBack() {
+        if (fullScreen) {
+            exitPageOnly()
+            return
+        }
+        if (drawer.isOpen()) {
+            drawer.close()
+            return
+        }
+        if (videoFullScreen) {
+            videoFullScreen = false
+            TabManager.exitPageFullScreen()
+            applyFullScreen()
+            return
+        }
+        if (current == Screen.LIST) {
+            show(previousScreen)
+            return
+        }
+        TabManager.goBack()
+    }
 
     private fun handleBack() {
         if (fullScreen) {
