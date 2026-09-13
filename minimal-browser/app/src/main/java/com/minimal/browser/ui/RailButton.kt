@@ -203,12 +203,12 @@ class RailButton(
             }
 
             MotionEvent.ACTION_UP -> {
-                val wasHolding = showingRing
+                val completedHold = holdFired
                 cancelHold()
-                // If the ring already completed, the hold fired onHoldComplete — do not
-                // also fire the tap, or lifting the finger right after the 5 s hold would
-                // immediately undo the full-screen toggle.
-                if (!wasHolding && !holdFired) performClick()
+                // A short press must still be an ordinary Web-button tap. Only
+                // suppress it after the precise five-second hold has completed,
+                // otherwise lifting after the hold would immediately undo it.
+                if (!completedHold) performClick()
                 holdFired = false
                 return true
             }

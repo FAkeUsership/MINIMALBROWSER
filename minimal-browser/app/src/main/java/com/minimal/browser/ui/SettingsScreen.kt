@@ -160,7 +160,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         3 -> "What a new tab opens."
         4 -> "Where files land and what you have fetched."
         5 -> "Take your bookmarks and history with you."
-        else -> "Minimal Browser · native Android System WebView engine"
+        else -> "Minimal Browser · bundled Mozilla GeckoView engine"
     }
 
     /* ================================================================== */
@@ -222,7 +222,8 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
             R.drawable.ic_lock, "Upgrade to HTTPS", "Always use secure connections", Prefs.httpsOnly
         ) { on ->
             Prefs.httpsOnly = on
-            callback?.toast(if (on) "HTTPS-first on — applies to new tabs" else "HTTPS-first off")
+            app().applyHttpsOnly()
+            callback?.toast(if (on) "HTTPS-first on" else "HTTPS-first off")
         }
 
         out += group("Content")
@@ -340,7 +341,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         }
         out += group("About")
         out += infoRow(R.drawable.ic_info, "Version", "Minimal Browser ${BuildConfig.VERSION_NAME} · open-source (MPL 2.0)")
-        out += infoRow(R.drawable.ic_globe, "Engine", "Android System WebView")
+        out += infoRow(R.drawable.ic_globe, "Engine", "Mozilla GeckoView · bundled ARM64")
         out += infoRow(R.drawable.ic_shield, "Block list", "Local request-level EasyList-style rules")
         return out
     }

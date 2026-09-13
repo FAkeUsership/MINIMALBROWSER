@@ -6,7 +6,7 @@
 !   /substring    matched anywhere in the URL
 !
 ! This list is evaluated by Minimal Browser before a subresource request
-! is allowed to continue to the device WebView renderer.
+! is allowed to continue through the bundled GeckoView engine.
 
 ## ad
 ||doubleclick.net^

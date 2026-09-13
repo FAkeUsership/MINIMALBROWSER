@@ -1,44 +1,37 @@
 # Build and release Minimal Browser
 
-The supported build path is **GitHub Actions** in [`.github/workflows/build.yml`](.github/workflows/build.yml). Do not rely on a local Android build for a release.
+The only supported release build path is **GitHub Actions** in [`.github/workflows/build.yml`](.github/workflows/build.yml). Do not use a local Android/Gradle build to publish an APK.
 
-## Publish a release
+## Publish v1.2.0
 
-1. Confirm the Android version in `minimal-browser/app/build.gradle.kts`.
+1. Confirm `versionCode` and `versionName` in `minimal-browser/app/build.gradle.kts`.
 2. Commit and push the repair.
-3. Push a new, unused `v*` tag:
+3. Push a new, unused `v*` tag that matches the Android version:
 
    ```bash
-   git tag v1.1.0
-   git push origin v1.1.0
+   git tag v1.2.0
+   git push origin v1.2.0
    ```
 
-4. Open the repository’s **Actions** page and wait for **Build Minimal Browser** to succeed.
-5. Open the matching GitHub Release and download `MinimalBrowser-android-debug.apk`.
+4. Open **Actions** and wait for **Build Minimal Browser** to finish successfully.
+5. Download `MinimalBrowser-arm64-v8a-debug.apk` and `SHA256SUMS.txt` from the matching GitHub Release.
 
-You can also start the workflow manually from Actions and enter a new tag beginning with `v`.
+The workflow can also be started manually from Actions with a new tag beginning with `v`.
 
-## What the workflow does
+## What GitHub Actions verifies
 
-1. checks out the tagged source;
-2. installs Java 17, Android API 36, and build-tools 36.0.0;
-3. retains the Android SDK rather than deleting `$ANDROID_HOME`;
-4. runs `assembleDebug` on the GitHub runner;
-5. uses `aapt2` to verify the `com.minimal.browser` package in the generated APK;
-6. verifies the APK does not contain the retired bundled native browser library;
-7. uploads one universal APK and `SHA256SUMS.txt` to the corresponding GitHub Release.
+1. Java 17, Android API 36, and build-tools 36.0.0 are present on the GitHub runner.
+2. `assembleDebug` produces the APK.
+3. The generated APK has application ID `com.minimal.browser`, version `1.2.0`, and ARM64 native code.
+4. The generated archive contains Gecko's `lib/arm64-v8a/libxul.so` and contains no other ABI directory.
+5. The generated manifest requests install-time native-library extraction.
+6. The generated package exceeds 80 MB, proving it is the requested bundled-engine APK rather than a small System WebView wrapper.
+7. The published APK has a SHA-256 checksum in `SHA256SUMS.txt`.
 
-## Expected release assets
-
-- `MinimalBrowser-android-debug.apk`
-- `SHA256SUMS.txt`
-
-Verify a downloaded asset with:
+## Verify a downloaded asset
 
 ```bash
 sha256sum -c SHA256SUMS.txt
 ```
 
-The APK is debug-signed and targets Android 8.0+ (`minSdk 26`). It uses the device’s Android System WebView provider, so a device with a disabled or obsolete provider should update Android System WebView or Chrome before browsing.
-
-A successful workflow verifies the generated artifact and release plumbing. It does **not** prove real-device behavior; validate Web, Home links, tabs, the 5-second page-only gesture, double-tap restore, and Android Back on the target Android device after installation.
+The APK is debug-signed and targets Android 8.0+ (`minSdk 26`). It intentionally carries Mozilla GeckoView's ARM64 native engine. A successful workflow proves build, packaging, and release plumbing; it does **not** prove live-device behavior. Validate Home links, Web navigation, tabs, the precise 5-second page-only gesture, page double-tap restore, Android Back, downloads, and printing on an Android 14+ ARM64 device after installation.

@@ -11,10 +11,26 @@ android {
 
     defaultConfig {
         applicationId = "com.minimal.browser"
-        minSdk = 26          // Android 8.0+; covers modern System WebView APIs
+        // Android 8.0+; the bundled Mozilla engine itself is packaged in this APK.
+        minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.1.0"
+        versionCode = 7
+        versionName = "1.2.0"
+
+        // The requested release is intentionally ARM64-only. This makes the
+        // APK substantial because it carries Gecko's native ARM64 libraries,
+        // rather than delegating page rendering to Android System WebView.
+    }
+
+    // Emit exactly one ABI split. This filters dependency native libraries
+    // too, so the release cannot silently become a universal APK.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a")
+            isUniversalApk = false
+        }
     }
 
     buildTypes {
@@ -36,6 +52,15 @@ android {
         buildConfig = true
     }
 
+    packaging {
+        jniLibs {
+            // Gecko loads companion libraries dynamically. Keep Android's
+            // install-time extraction path instead of direct APK mapping, which
+            // avoids the Android 14+ native-loader path behind the old failures.
+            useLegacyPackaging = true
+        }
+    }
+
     lint {
         abortOnError = false
     }
@@ -53,4 +78,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
 
+    // Mozilla's release-channel GeckoView. Native ARM64 engine code is bundled
+    // by this dependency and restricted above to arm64-v8a in the APK.
+    implementation("org.mozilla.geckoview:geckoview:153.0.20260810162159")
 }

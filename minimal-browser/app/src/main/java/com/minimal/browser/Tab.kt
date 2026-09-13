@@ -1,37 +1,41 @@
 package com.minimal.browser
 
 import android.graphics.Bitmap
-import android.webkit.WebView
+import org.mozilla.geckoview.GeckoSession
 import java.util.UUID
 
 /**
- * One browser tab backed by Android's system WebView.
+ * One tab backed by one open GeckoSession.
  *
- * The old build stored a bundled-engine session here. Keeping browser state in
- * this small model lets the UI, history, tab cards, and page-only mode remain stable
- * while avoiding a bundled native browser process on Android 14+.
+ * The rendering surface is deliberately not stored here: TabManager attaches
+ * only the active session to one visible GeckoView, which avoids a background
+ * compositor owning a hidden Android surface.
  */
-class Tab(val private: Boolean) {
+class Tab(
+    var session: GeckoSession,
+    val private: Boolean
+) {
     var id: String = UUID.randomUUID().toString()
-
-    /** The view is replaced if Android reports that its renderer died. */
-    var webView: WebView? = null
-    var defaultUserAgent: String = ""
 
     var url: String = ""
     var title: String = ""
+    /** Transient custom error-page URI; never replaces the failed page URL. */
+    var errorPageUrl: String? = null
+    /** A restored background tab loads its saved URL only when selected. */
+    var pendingRestoreUrl: String? = null
 
     var canGoBack: Boolean = false
     var canGoForward: Boolean = false
     var isSecure: Boolean = false
 
-    /** Per-page request-block counters shown by the browser chrome. */
+    /** Per-page shield counters shown by the browser chrome. */
     var blockedAds: Int = 0
     var blockedTrackers: Int = 0
 
     var thumbnail: Bitmap? = null
+    var sessionState: GeckoSession.SessionState? = null
 
-    /** Reserved for the database schema; WebView restores the tab URL safely. */
+    /** Last serializable session state, retained only for tab restore. */
     var stateJson: String? = null
 
     val host: String get() = UrlBar.hostOf(url)

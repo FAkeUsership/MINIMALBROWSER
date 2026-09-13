@@ -1,24 +1,31 @@
 # Changelog
 
+## v1.2.0 — Bundled GeckoView ARM64 reconstruction
+
+- Restores Mozilla GeckoView as Minimal Browser’s bundled ARM64 browser engine; no Android System WebView renderer is used.
+- Rebuilds tab/session ownership around one process-wide lazy runtime, delegates-before-open, and one deferred texture-backed visible GeckoView.
+- Releases a session before hiding/removing its surface, avoids competing GeckoDisplay acquisition during thumbnail capture, and recovers only a renderer-crashed/killed session by replacing and reloading it.
+- Fixes target-window tab creation to return an unopened GeckoSession as required by GeckoView.
+- Fixes short presses on the Web rail button: a normal tap opens Web, while only a completed exact 5-second hold enters clean page-only mode; late progress/shield updates cannot draw chrome over that page-only view.
+- Defers background restored-tab network loads until each tab is selected, avoiding a burst of hidden page startups at engine launch.
+- Uses Gecko’s `saveAsPdf()` for normal web-page printing and moves PDF stream/write operations off the UI thread.
+- Keeps Home links (including Mail and YouTube), navigation/search, tabs, downloads, history, external URI routing, and privacy settings on the bundled-engine path.
+- Restores install-time native-library extraction and ARM64-only APK packaging; GitHub Actions validates the generated `libxul.so`, ABI, manifest extraction setting, artifact size, and SHA-256 checksum before publishing.
+
 ## v1.1.0 — System WebView stability rewrite
 
-- Replaces the bundled native browser renderer with Android System WebView throughout the tab, navigation, download, print, data-clearing, lifecycle, and recovery paths.
-- Creates WebViews lazily at tab creation, so Home, Tabs, and Settings remain usable if the device WebView provider is unavailable; failures are contained rather than crashing the Activity.
-- Preserves a real WebView per tab, attaches only the active tab to the Web screen, and prevents background page callbacks from attaching the wrong page.
-- Handles a killed WebView renderer by replacing and reloading only its affected tab.
-- Keeps Home quick links and ordinary web navigation inside the browser, while correctly routing `mailto:`, `tel:`, `geo:`, `market:`, and `intent:` links to Android handlers/fallbacks.
-- Preserves the required page-only flow: hold **Web** for exactly five seconds; Android Back or a page double-tap restores browser controls and system bars.
-- Removes native-engine dependencies, extraction settings, ABI split assumptions, and split-APK release assets. GitHub Actions now publishes one universal System WebView APK plus `SHA256SUMS.txt`.
+- Historical release that temporarily replaced the bundled native renderer with Android System WebView.
+- Superseded by v1.2.0’s bundled GeckoView reconstruction.
 
 ## v1.0.4 — Native packaging attempt
 
-- Changed native-library extraction packaging in an attempt to address the previous renderer startup failures.
-- Superseded by v1.1.0’s System WebView migration.
+- Changed native-library extraction packaging in an attempt to address previous renderer startup failures.
+- Superseded by v1.2.0’s complete bundled-engine reconstruction.
 
 ## v1.0.3 — Renderer startup attempt
 
 - Added defensive renderer/session startup ordering and visible-surface handling.
-- Superseded by v1.1.0’s System WebView migration.
+- Superseded by v1.2.0’s complete bundled-engine reconstruction.
 
 ## v1.0.2
 

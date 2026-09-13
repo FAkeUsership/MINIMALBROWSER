@@ -1,14 +1,14 @@
 # Minimal Browser repository setup
 
-GitHub Actions is configured in [`.github/workflows/build.yml`](.github/workflows/build.yml) to build and publish Minimal Browser releases.
+GitHub Actions in [`.github/workflows/build.yml`](.github/workflows/build.yml) builds and publishes **Minimal Browser** releases. It is the designated build path for the bundled ARM64 GeckoView APK.
 
 ## Release permission
 
-The workflow declares `contents: write`, allowing the repository’s default `GITHUB_TOKEN` to create or update a GitHub Release and upload its APK assets. In repository settings, ensure Actions is allowed **Read and write permissions** for workflow tokens.
+The workflow declares `contents: write`, allowing the repository’s default `GITHUB_TOKEN` to create or update a GitHub Release and upload APK assets. In repository settings, ensure Actions workflow tokens have **Read and write permissions**.
 
 ## Publishing
 
-Push a new version tag such as `v1.1.0`. The workflow builds the APK on GitHub, verifies the artifact, and creates the matching release. Existing version tags/releases must not be overwritten for a new release.
+Push a new matching version tag, for example `v1.2.0`. The workflow builds the bundled GeckoView ARM64 APK on GitHub, verifies package contents and checksum, and creates the matching release. Do not overwrite a prior version tag/release for a new version.
 
 If changing the workflow through the GitHub API or with a classic personal access token, the token needs both:
 

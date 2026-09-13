@@ -1,6 +1,7 @@
 name: Build Minimal Browser
 
-# A v* tag builds the Android APK on GitHub and publishes it to that Release.
+# A v* tag builds the ARM64 bundled-engine APK on GitHub and publishes it to
+# the matching release. No local Gradle build is part of the release path.
 on:
   push:
     tags:
@@ -8,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.1.0)'
+        description: 'Release tag to create or update (for example: v1.2.0)'
         required: true
-        default: 'v1.1.0'
+        default: 'v1.2.0'
         type: string
 
 permissions:
@@ -22,7 +23,7 @@ concurrency:
 
 jobs:
   minimal-browser:
-    name: Minimal Browser (Android System WebView)
+    name: Minimal Browser (bundled GeckoView ARM64)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,39 +45,50 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Deliberately retain the Android SDK. The original broken workflow deleted
-      # its own SDK before Gradle ran.
+      # Retain the Android SDK. Only unrelated hosted tools are removed to make
+      # headroom for Mozilla's large native engine dependency.
       - name: Free non-Android disk headroom
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL || true
           df -h / | tail -1
           test -d "$ANDROID_HOME/platforms/android-36"
 
-      - name: Assemble
+      - name: Assemble ARM64 bundled-engine APK
         working-directory: minimal-browser
         run: ./gradlew --no-daemon --stacktrace assembleDebug
 
-      - name: Verify APK
+      - name: Verify generated APK contents
         run: |
           set -euo pipefail
-          APK=minimal-browser/app/build/outputs/apk/debug/app-debug.apk
-          test -s "$APK"
+          APK=minimal-browser/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
           AAPT2="$ANDROID_HOME/build-tools/36.0.0/aapt2"
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
           "$AAPT2" dump badging "$APK" | tee /tmp/minimal-browser-badging.txt
-          grep -Eq "^package: name='com\.minimal\.browser'" /tmp/minimal-browser-badging.txt
-          # A System WebView build must not accidentally carry the retired native engine.
-          ! unzip -l "$APK" | grep -Eq 'lib/(arm64-v8a|armeabi-v7a|x86_64)/libxul\.so'
+          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.0'" /tmp/minimal-browser-badging.txt
+          grep -Eq "native-code:.*'arm64-v8a'" /tmp/minimal-browser-badging.txt
+          # Assert against the built APK, not source: exactly the requested ABI
+          # and Gecko's main native library must be present.
+          unzip -l "$APK" | tee /tmp/minimal-browser-zip.txt
+          grep -Eq 'lib/arm64-v8a/libxul\.so$' /tmp/minimal-browser-zip.txt
+          ! grep -Eq 'lib/(armeabi-v7a|x86|x86_64|riscv64)/' /tmp/minimal-browser-zip.txt
+          # Install-time extraction is deliberate for Gecko's companion libs.
+          "$AAPT2" dump xmltree "$APK" --file AndroidManifest.xml | \
+            grep -Eq 'extractNativeLibs.*(0xffffffff|true)'
+          APK_BYTES=$(stat -c%s "$APK")
+          echo "APK_BYTES=$APK_BYTES"
+          test "$APK_BYTES" -gt 80000000
           ls -lh "$APK"
 
       - name: Prepare release files
         run: |
           set -euo pipefail
           mkdir -p release
-          cp minimal-browser/app/build/outputs/apk/debug/app-debug.apk \
-            release/MinimalBrowser-android-debug.apk
+          cp minimal-browser/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk \
+            release/MinimalBrowser-arm64-v8a-debug.apk
           (
             cd release
-            sha256sum MinimalBrowser-android-debug.apk > SHA256SUMS.txt
+            sha256sum MinimalBrowser-arm64-v8a-debug.apk > SHA256SUMS.txt
           )
           ls -lh release
           cat release/SHA256SUMS.txt
@@ -91,7 +103,7 @@ jobs:
             v*) ;;
             *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
           esac
-          NOTES="Minimal Browser $TAG replaces the crashing bundled native engine with Android System WebView. Web, Tabs, page-only mode, YouTube, Mail links, downloads, and Android Back run through the stable platform browser renderer. SHA256SUMS.txt verifies the published APK. App ID: com.minimal.browser."
+          NOTES="Minimal Browser $TAG ships the repaired Mozilla GeckoView engine inside the ARM64 APK. The release verifies the generated package ID, ARM64-only native code, libxul.so, install-time native extraction, checksum, and a substantial bundled-engine artifact. Web navigation/search, Home links including Mail and YouTube, tabs, downloads, printing, and page-only mode use the bundled engine. Hold Web for exactly 5 seconds; Android Back or a page double-tap restores controls and system bars. SHA256SUMS.txt verifies the APK. App ID: com.minimal.browser."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else

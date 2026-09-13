@@ -11,6 +11,7 @@ import android.text.InputType
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.EditText
@@ -37,10 +38,11 @@ import com.minimal.browser.ui.WebScreen
 import com.minimal.browser.ui.dp
 import com.minimal.browser.ui.icon
 import com.minimal.browser.ui.roundRect
+import org.mozilla.geckoview.GeckoView
 
 /**
  * Minimal — a landscape, monochrome, privacy-first browser shell around
- * Android's maintained System WebView engine.
+ * the bundled Mozilla GeckoView engine.
  *
  * Page-only mode:
  *   • hold the **Web** rail button for exactly 5 seconds → only the page stays
@@ -68,12 +70,19 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private lateinit var listScreen: ListScreen
     private lateinit var drawer: MenuDrawer
     private lateinit var toast: AppToast
+    /** Created only after the bundled engine is ready and Web is visible. */
+    private var geckoView: GeckoView? = null
 
     /* ---------------- state ---------------- */
     private var current = Screen.HOME
     private var previousScreen = Screen.HOME
     /** App page-only mode, entered after holding Web for five seconds. */
     private var fullScreen = false
+    /** A web page's own HTML/video full-screen request. */
+    private var videoFullScreen = false
+    /** Saved tabs are restored only after a user actually needs the engine. */
+    private var restoreAttempted = false
+    private var lastEngineFailure: String? = null
 
     private var lastExitAt = 0L
     private var firstHoldHintDone = false
@@ -96,8 +105,8 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Prefs.init(this)
-        // WebView is created lazily when a tab is needed. The app shell, Home,
-        // Tabs, and page-only gesture are all safe before a renderer exists.
+        // The bundled runtime and GeckoView are both created lazily at the Web
+        // boundary. Home, Tabs, and Settings never start native browser code.
         TabManager.host = this
 
         // Landscape is also locked in the manifest (android:screenOrientation).
@@ -265,7 +274,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         webScreen.onBack = { TabManager.goBack() }
         webScreen.onForward = { TabManager.goForward() }
         webScreen.onReload = { TabManager.reload() }
-        webScreen.onTabs = { show(Screen.TABS) }
+        webScreen.onTabs = { leaveFullScreenIfNeeded(); show(Screen.TABS) }
         webScreen.onMenu = { drawer.toggle() }
         // In page-only mode the content is visually clean. A double tap anywhere
         // on the page restores normal browser controls.
@@ -303,9 +312,12 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         if (screen != Screen.LIST) previousScreen = current
         current = screen
 
-        // Keep a browser surface attached only while the Web screen is visible.
-        // Tabs remain alive; the WebView is simply reattached when Web is selected.
-        if (screen != Screen.WEB) webScreen.detachWebView()
+        // A Gecko compositor owns a surface only while the Web screen is visible.
+        // Release first, while the view is still attached, then remove it from UI.
+        if (screen != Screen.WEB) {
+            TabManager.detach()
+            webScreen.detachGeckoView()
+        }
 
         homeScreen.visibility = if (screen == Screen.HOME) View.VISIBLE else View.GONE
         webScreen.visibility = if (screen == Screen.WEB) View.VISIBLE else View.GONE
@@ -324,11 +336,11 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             Screen.WEB -> {
                 rail.setActive(rail.web)
                 topTitle.text = "Web"
-                var tab = TabManager.active
-                if (tab == null) tab = openNewTabSafely()
-                // WebView is attached only after a live tab was created, keeping
-                // renderer startup independent from the non-browser app screens.
-                webScreen.attachWebView(tab?.webView)
+                var tab: Tab? = null
+                if (ensureBrowserReady()) {
+                    tab = TabManager.active ?: openNewTabSafely()
+                    attachActiveTabToVisibleView(tab)
+                }
                 topCrumb.text = tab?.host?.ifEmpty { "loading" } ?: getString(R.string.crumb_browser)
                 webScreen.syncTo(tab)
             }
@@ -373,7 +385,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
      * system bar over the web page — it matches the clean reference screenshot.
      */
     private fun applyFullScreen() {
-        val pageOnly = fullScreen
+        val pageOnly = fullScreen || videoFullScreen
         val onWeb = current == Screen.WEB
 
         rail.visibility = if (pageOnly) View.GONE else View.VISIBLE
@@ -393,7 +405,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
      * system bars are immersive and any edge reveal automatically disappears
      * again, like other Android full-screen apps.
      */
-    private fun applySystemUi(pageOnly: Boolean = fullScreen) {
+    private fun applySystemUi(pageOnly: Boolean = fullScreen || videoFullScreen) {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         WindowCompat.setDecorFitsSystemWindows(window, !pageOnly)
         if (pageOnly) {
@@ -413,6 +425,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         if (fullScreen) return
         // Do not hide every control around a failed engine start. Establish a
         // usable tab first, then enter the intentionally chrome-free page view.
+        if (!ensureBrowserReady()) return
         if (TabManager.active == null && openNewTabSafely() == null) return
         fullScreen = true
         drawer.closeImmediately()
@@ -437,6 +450,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private fun handleBack() {
         if (drawer.isOpen()) {
             drawer.close()
+            return
+        }
+        if (videoFullScreen) {
+            TabManager.exitPageFullScreen()
             return
         }
         if (fullScreen) {
@@ -466,26 +483,101 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /* ================================================================== */
 
     /**
-     * One failure boundary for System WebView creation. A missing or disabled
-     * WebView provider leaves Home/Settings usable rather than crashing the app.
+     * One guarded bundled-engine boundary. A failed native startup leaves the
+     * Home and Settings screens usable and avoids a crash on Web navigation.
      */
-    private fun openNewTabSafely(url: String? = null, privateTab: Boolean = false): Tab? = try {
-        TabManager.newTab(this, url, privateMode = privateTab)
-    } catch (e: Throwable) {
-        Log.e("MinimalBrowser", "Unable to create Android WebView", e)
-        toast.say(getString(R.string.t_webview_failed))
-        null
+    private fun ensureBrowserReady(): Boolean {
+        val runtime = BrowserApp.ensureRuntime(this)
+        if (runtime == null) {
+            explainEngineUnavailable()
+            return false
+        }
+        TabManager.init(runtime)
+        restoreTabsIfNeeded()
+        return true
+    }
+
+    /** Restore URL-only ordinary tabs after, never before, Gecko is available. */
+    private fun restoreTabsIfNeeded() {
+        if (restoreAttempted) return
+        restoreAttempted = true
+        // A process-wide runtime can outlive an Activity recreation. Its live
+        // tabs are already the source of truth, so never duplicate them from
+        // the persisted URL snapshot in the replacement Activity.
+        if (TabManager.tabs.isNotEmpty()) return
+        val restored = runCatching { TabManager.restore(this) }.getOrElse { error ->
+            Log.e("MinimalBrowser", "Could not restore bundled-engine tabs", error)
+            false
+        }
+        if (restored && TabManager.active == null) {
+            TabManager.tabs.firstOrNull()?.let { TabManager.switchTo(it) }
+        }
+    }
+
+    private fun explainEngineUnavailable() {
+        val detail = BrowserApp.startupFailure.orEmpty()
+        if (detail == lastEngineFailure) return
+        lastEngineFailure = detail
+        val base = getString(R.string.t_engine_failed)
+        toast.say(if (detail.isBlank()) base else "$base ($detail)")
+    }
+
+    private fun openNewTabSafely(url: String? = null, privateTab: Boolean = false): Tab? {
+        if (!ensureBrowserReady()) return null
+        return try {
+            TabManager.newTab(url, privateMode = privateTab)
+        } catch (error: Throwable) {
+            Log.e("MinimalBrowser", "Unable to create bundled-engine tab", error)
+            toast.say(getString(R.string.t_engine_session_failed))
+            null
+        }
     }
 
     private fun loadActiveSafely(url: String): Boolean = try {
         if (TabManager.loadInActive(url)) true else {
-            toast.say(getString(R.string.t_webview_failed))
+            toast.say(getString(R.string.t_engine_session_failed))
             false
         }
-    } catch (e: Throwable) {
-        Log.e("MinimalBrowser", "Unable to load URL in Android WebView", e)
-        toast.say(getString(R.string.t_webview_failed))
+    } catch (error: Throwable) {
+        Log.e("MinimalBrowser", "Unable to load URL in bundled engine", error)
+        toast.say(getString(R.string.t_engine_session_failed))
         false
+    }
+
+    /** Creates the one texture-backed visible compositor view on demand. */
+    private fun ensureGeckoView(): GeckoView? {
+        geckoView?.let { return it }
+        return try {
+            object : GeckoView(this@MainActivity) {
+                override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                    // Observe before Gecko's internal TextureView dispatches;
+                    // this keeps the required page-only double tap reliable.
+                    webScreen.observePageTouch(event)
+                    return super.dispatchTouchEvent(event)
+                }
+            }.apply {
+                // TextureView lets toolbar/banner overlays remain above content
+                // without SurfaceView z-order races on Android 14+.
+                setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
+            }.also { geckoView = it }
+        } catch (error: Throwable) {
+            Log.e("MinimalBrowser", "Unable to create GeckoView", error)
+            toast.say(getString(R.string.t_engine_session_failed))
+            null
+        }
+    }
+
+    /** Moves the lone visible GeckoView into WebScreen, then attaches its session. */
+    private fun attachActiveTabToVisibleView(tab: Tab?) {
+        val view = ensureGeckoView() ?: return
+        webScreen.attachGeckoView(view)
+        webScreen.post {
+            if (current == Screen.WEB && TabManager.active === tab) {
+                // TabManager handles a not-yet-attached view by reposting after
+                // Android gives it a window, rather than binding a hidden surface.
+                TabManager.attach(view)
+            }
+        }
     }
 
     /* ================================================================== */
@@ -519,7 +611,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         show(Screen.WEB)
     }
 
-    /** @return true only when a real System WebView tab was opened. */
+    /** @return true only when a real bundled-engine tab was opened. */
     private fun newTab(): Boolean {
         val target = when (Prefs.homepageMode) {
             HomePageModes.BLANK -> "about:blank"
@@ -543,24 +635,14 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         val query = intent.getStringExtra("query")
         when {
             !uri.isNullOrEmpty() -> openUrl(uri)
-            !query.isNullOrBlank() -> openUrl(query)
+            !query.isNullOrBlank() -> openInput(query)
             else -> bootstrap()
         }
     }
 
     private fun bootstrap() {
-        val restored = try {
-            TabManager.restore(this)
-        } catch (e: Throwable) {
-            Log.e("MinimalBrowser", "Could not restore WebView tabs", e)
-            toast.say(getString(R.string.t_webview_failed))
-            false
-        }
-        if (restored) {
-            TabManager.tabs.firstOrNull()?.let { TabManager.switchTo(it) }
-        }
-        // On a fresh launch Home deliberately does not construct a renderer.
-        // A tab is created only for Web, a quick link/search, or a new-tab action.
+        // Home deliberately does not construct the bundled native engine. Saved
+        // URLs are restored only if the user opens Web or follows a link.
         show(Screen.HOME)
     }
 
@@ -591,7 +673,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     override fun onActiveTabChanged(tab: Tab?) {
         if (current == Screen.WEB) {
-            webScreen.attachWebView(tab?.webView)
+            attachActiveTabToVisibleView(tab)
             webScreen.syncTo(tab)
             topCrumb.text = tab?.host?.ifEmpty { "loading" } ?: getString(R.string.crumb_browser)
         }
@@ -618,16 +700,42 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         // Counted in the database; the Home footer reads it back.
     }
 
+    override fun onEnterVideoFullScreen(fullScreen: Boolean) {
+        // A hidden/inactive tab must not hide the ordinary Home/Tabs UI because
+        // of a delayed content callback after its surface was released.
+        if (current != Screen.WEB) {
+            if (!fullScreen) videoFullScreen = false
+            return
+        }
+        videoFullScreen = fullScreen
+        applyFullScreen()
+    }
+
     override fun onDownloadStarted(fileName: String) {
         toast.say("Downloading $fileName")
     }
 
-    override fun onRendererRecovered(tab: Tab) {
-        if (TabManager.active === tab && current == Screen.WEB) {
-            webScreen.attachWebView(tab.webView)
-            webScreen.syncTo(tab)
-            if (!fullScreen) toast.say("Page renderer restarted")
+    override fun onTabWantsToClose(tab: Tab) {
+        TabManager.close(tab)
+        if (TabManager.tabs.isEmpty()) {
+            leaveFullScreenIfNeeded()
+            show(Screen.HOME)
+        } else {
+            toast.say(getString(R.string.t_tab_closed))
         }
+    }
+
+    override fun onSessionRecovered(tab: Tab) {
+        if (TabManager.active === tab && current == Screen.WEB) {
+            attachActiveTabToVisibleView(tab)
+            webScreen.syncTo(tab)
+            if (!fullScreen && !videoFullScreen) toast.say("Page renderer restarted")
+        }
+    }
+
+    override fun onSessionFailure(tab: Tab, reason: String) {
+        if (TabManager.active === tab) webScreen.syncTo(tab)
+        if (!fullScreen && !videoFullScreen) toast.say(reason)
     }
 
     /* ================================================================== */
@@ -701,7 +809,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     override fun onPrint() {
-        val ok = Printer.printCurrentPage(this, TabManager.active?.webView)
+        val ok = Printer.printCurrentPage(this, TabManager.active?.session)
         toast.say(if (ok) "Preparing print…" else "Nothing to print yet")
     }
 
@@ -759,8 +867,9 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                         if (checked[3]) db.clearBlocked()
                     }.isSuccess
                     runOnUiThread {
-                        // WebView APIs must run on the UI thread.
-                        TabManager.clearWebData(
+                        // Keep the Gecko storage operation on the same UI boundary
+                        // as session lifecycle changes.
+                        TabManager.clearEngineData(
                             clearCookies = checked[1],
                             clearCache = checked[2],
                             clearHistory = checked[0]
@@ -775,7 +884,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     override fun onShowAbout() {
         AlertDialog.Builder(this, R.style.Theme_Minimal_Dialog)
             .setTitle("Minimal Browser ${BuildConfig.VERSION_NAME}")
-            .setMessage("Native Android browser shell\nEngine: Android System WebView")
+            .setMessage("Privacy-first Android browser\nEngine: Mozilla GeckoView (bundled ARM64)")
             .setPositiveButton("OK", null)
             .show()
     }
@@ -821,8 +930,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     override fun onResume() {
         super.onResume()
-        TabManager.resumeActive()
-        if (current == Screen.WEB) webScreen.attachWebView(TabManager.active?.webView)
+        if (current == Screen.WEB && ensureBrowserReady()) {
+            attachActiveTabToVisibleView(TabManager.active)
+            TabManager.resumeActive()
+        }
         applySystemUi()
         homeScreen.refresh()
     }
@@ -830,12 +941,14 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     override fun onPause() {
         TabManager.persist()
         TabManager.pauseActive()
-        webScreen.detachWebView()
+        TabManager.detach()
+        webScreen.detachGeckoView()
         super.onPause()
     }
 
     override fun onDestroy() {
-        webScreen.detachWebView()
+        TabManager.detach()
+        webScreen.detachGeckoView()
         TabManager.host = null
         super.onDestroy()
     }
@@ -843,5 +956,13 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) applySystemUi()
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // The manifest handles configuration changes in place; forward them to
+        // the long-lived bundled runtime instead of recreating native sessions.
+        runCatching { BrowserApp.runtime?.configurationChanged(newConfig) }
+            .onFailure { Log.w("MinimalBrowser", "could not update Gecko configuration", it) }
     }
 }

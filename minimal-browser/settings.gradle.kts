@@ -11,6 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // GeckoView release artifacts are published by Mozilla, not Maven Central.
+        maven(url = "https://maven.mozilla.org/maven2/")
     }
 }
 

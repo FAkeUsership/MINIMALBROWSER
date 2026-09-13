@@ -5,7 +5,7 @@ import android.net.Uri
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Request-level blocker used by the System WebView client before subresources load.
+ * Request-level blocker used by Gecko navigation callbacks before eligible subframes load.
  *
  * Rules are loaded from `assets/blocklist.txt`:
  *   lines starting with `!` are comments
