@@ -1,1 +1,74 @@
-aW1wb3J0IG9yZy5qZXRicmFpbnMua290bGluLmdyYWRsZS5kc2wuSnZtVGFyZ2V0CgpwbHVnaW5zIHsKICAgIGlkKCJjb20uYW5kcm9pZC5hcHBsaWNhdGlvbiIpCiAgICBpZCgib3JnLmpldGJyYWlucy5rb3RsaW4uYW5kcm9pZCIpCn0KCmFuZHJvaWQgewogICAgbmFtZXNwYWNlID0gImNvbS5taW5pbWFsLmJyb3dzZXIiCiAgICBjb21waWxlU2RrID0gMzYKCiAgICBkZWZhdWx0Q29uZmlnIHsKICAgICAgICBhcHBsaWNhdGlvbklkID0gImNvbS5taW5pbWFsLmJyb3dzZXIiCiAgICAgICAgbWluU2RrID0gMjYgICAgICAgICAgLy8gR2Vja29WaWV3IGRlY2xhcmVzIG1pblNka1ZlcnNpb24gMjYKICAgICAgICB0YXJnZXRTZGsgPSAzNgogICAgICAgIHZlcnNpb25Db2RlID0gMgogICAgICAgIHZlcnNpb25OYW1lID0gIjEuMC4xIgogICAgfQoKICAgIGJ1aWxkVHlwZXMgewogICAgICAgIGRlYnVnIHsKICAgICAgICAgICAgaXNNaW5pZnlFbmFibGVkID0gZmFsc2UKICAgICAgICB9CiAgICAgICAgcmVsZWFzZSB7CiAgICAgICAgICAgIGlzTWluaWZ5RW5hYmxlZCA9IGZhbHNlCiAgICAgICAgICAgIHByb2d1YXJkRmlsZXMoZ2V0RGVmYXVsdFByb2d1YXJkRmlsZSgicHJvZ3VhcmQtYW5kcm9pZC1vcHRpbWl6ZS50eHQiKSwgInByb2d1YXJkLXJ1bGVzLnBybyIpCiAgICAgICAgfQogICAgfQoKICAgIGNvbXBpbGVPcHRpb25zIHsKICAgICAgICBzb3VyY2VDb21wYXRpYmlsaXR5ID0gSmF2YVZlcnNpb24uVkVSU0lPTl8xNwogICAgICAgIHRhcmdldENvbXBhdGliaWxpdHkgPSBKYXZhVmVyc2lvbi5WRVJTSU9OXzE3CiAgICB9CgogICAgYnVpbGRGZWF0dXJlcyB7CiAgICAgICAgYnVpbGRDb25maWcgPSB0cnVlCiAgICB9CgogICAgLyoqCiAgICAgKiBHZWNrb1ZpZXcgY2FycmllcyBuYXRpdmUgY29kZSBmb3IgdGhyZWUgQUJJcyAofjE1MCBNQiBlYWNoKSwgc28gdGhlCiAgICAgKiB1bml2ZXJzYWwgQVBLIGlzIH41MzAgTUIuIFNwbGl0dGluZyBhbHNvIGVtaXRzIG9uZSBBUEsgcGVyIEFCSQogICAgICogKH4xNjDigJMyMjAgTUIpIOKAlCBpbnN0YWxsIGBhcm02NC12OGFgIG9uIGVzc2VudGlhbGx5IGFueSBtb2Rlcm4gdGFibGV0LgogICAgICogQ0kgaGFzIHRoZSBSQU0gZm9yIHRoaXM7IGEgMSBHQiBtYWNoaW5lIG1heSBub3QuCiAgICAgKi8KICAgIHNwbGl0cyB7CiAgICAgICAgYWJpIHsKICAgICAgICAgICAgaXNFbmFibGUgPSB0cnVlCiAgICAgICAgICAgIHJlc2V0KCkKICAgICAgICAgICAgaW5jbHVkZSgiYXJtNjQtdjhhIiwgImFybWVhYmktdjdhIiwgIng4Nl82NCIpCiAgICAgICAgICAgIGlzVW5pdmVyc2FsQXBrID0gdHJ1ZQogICAgICAgIH0KICAgIH0KCiAgICBsaW50IHsKICAgICAgICBhYm9ydE9uRXJyb3IgPSBmYWxzZQogICAgfQp9Cgprb3RsaW4gewogICAgY29tcGlsZXJPcHRpb25zIHsKICAgICAgICBqdm1UYXJnZXQuc2V0KEp2bVRhcmdldC5KVk1fMTcpCiAgICB9Cn0KCmRlcGVuZGVuY2llcyB7CiAgICBpbXBsZW1lbnRhdGlvbigiYW5kcm9pZHguY29yZTpjb3JlLWt0eDoxLjEzLjEiKQogICAgaW1wbGVtZW50YXRpb24oImFuZHJvaWR4LmFwcGNvbXBhdDphcHBjb21wYXQ6MS43LjAiKQogICAgaW1wbGVtZW50YXRpb24oImFuZHJvaWR4LmFjdGl2aXR5OmFjdGl2aXR5LWt0eDoxLjkuMyIpCiAgICBpbXBsZW1lbnRhdGlvbigiYW5kcm9pZHguY29uc3RyYWludGxheW91dDpjb25zdHJhaW50bGF5b3V0OjIuMS40IikKICAgIGltcGxlbWVudGF0aW9uKCJhbmRyb2lkeC5yZWN5Y2xlcnZpZXc6cmVjeWNsZXJ2aWV3OjEuMy4yIikKCiAgICAvLyAtLS0tIEZpcmVmb3ggLyBHZWNrb1ZpZXcgZW5naW5lIChvcGVuIHNvdXJjZSwgcHJlYnVpbHQsIE1QTCAyLjApIC0tLS0KICAgIGltcGxlbWVudGF0aW9uKCJvcmcubW96aWxsYS5nZWNrb3ZpZXc6Z2Vja292aWV3OjE1My4wLjIwMjYwODEwMTYyMTU5IikKfQo=
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "com.minimal.browser"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "com.minimal.browser"
+        minSdk = 26          // GeckoView declares minSdkVersion 26
+        targetSdk = 36
+        versionCode = 1
+        versionName = "1.0.0"
+    }
+
+    buildTypes {
+        debug {
+            isMinifyEnabled = false
+        }
+        release {
+            isMinifyEnabled = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    /**
+     * GeckoView carries native code for three ABIs (~150 MB each), so the
+     * universal APK is ~530 MB. Splitting also emits one APK per ABI
+     * (~160–220 MB) — install `arm64-v8a` on essentially any modern tablet.
+     * CI has the RAM for this; a 1 GB machine may not.
+     */
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
+    lint {
+        abortOnError = false
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+
+    // ---- Firefox / GeckoView engine (open source, prebuilt, MPL 2.0) ----
+    implementation("org.mozilla.geckoview:geckoview:153.0.20260810162159")
+}
