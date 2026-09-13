@@ -1,0 +1,64 @@
+name: Build Minimal Browser (GeckoView)
+
+# HOW TO TRIGGER: push a tag named v1.0.0 — see the instructions. Or run this
+# workflow manually from the Actions tab. It builds on GitHub's own Linux
+# runners (16 GB RAM), which are free and unlimited on public repositories.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firefox:
+    name: Firefox (GeckoView 153)
+    runs-on: ubuntu-latest           # 16 GB RAM / 4 vCPU — required, do not change
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Free disk headroom
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h / | tail -1
+
+      - name: Assemble
+        working-directory: firefox
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Verify APKs
+        run: |
+          set -euo pipefail
+          cd firefox/app/build/outputs/apk/debug
+          ls -l --block-size=MB
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)
+          for a in *.apk; do
+            echo "--- $a ---"
+            "$AAPT2" dump badging "$a" | grep -E "^package|screenOrientation|sdkVersion|native-code"
+          done
+
+      - name: Publish to Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
+        run: |
+          set -euo pipefail
+          cd firefox/app/build/outputs/apk/debug
+          NOTES="Debug-signed builds. Installable and usable, but anyone holding a debug key could sign an update over these, so this is not an official distribution channel. INSTALL app-arm64-v8a-debug.apk on any phone from roughly 2017 onward (real Firefox/GeckoView 153 engine, about 200 MB). app-universal-debug.apk is only needed for 32-bit devices or emulators (about 530 MB, carries the engine for all three ABIs). Landscape-only, application id com.minimal.browser."
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "Minimal Browser $TAG" --notes "$NOTES" app-arm64-v8a-debug.apk || gh release upload "$TAG" app-arm64-v8a-debug.apk --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" app-universal-debug.apk --clobber --repo "$GITHUB_REPOSITORY"
+          echo "=== release assets ==="
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY"
