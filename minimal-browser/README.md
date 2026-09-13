@@ -25,13 +25,14 @@ The Gradle configuration intentionally packages only `arm64-v8a`. The resulting 
 
 - `BrowserApp` creates one process-wide `GeckoRuntime` lazily at the Web/navigation boundary.
 - `TabManager` gives each tab a `GeckoSession`, installs all delegates before `open`, and keeps only one visible surface attached.
-- `MainActivity` creates one `GeckoView` only after the Web screen becomes visible, configures `BACKEND_TEXTURE_VIEW`, and releases the session before hiding/removing the view.
-- Ordinary tab restore stores URLs/titles only. Private tabs are excluded.
+- `MainActivity` creates one `GeckoView` only after the Web screen becomes visible, configures GeckoView’s high-performance `BACKEND_SURFACE_VIEW`, and releases the session before hiding/removing the view.
+- Automatic full-frame tab screenshots are intentionally avoided; tab cards use lightweight artwork so switching/loading does not force a GPU readback.
+- Shield events are coalesced into short UI/database batches on one low-priority worker; ordinary tab restore stores URLs/titles only. Private tabs are excluded.
 - `onCrash` and `onKill` replace only the affected session and reload its last URL.
 
 ## Page-only mode
 
-The Web rail button has one fixed gesture: **hold it for exactly 5 seconds**. Page-only mode leaves the web page as the only visible content and hides Android system bars. Android Back or a double tap on the page restores normal browser controls and normal system bars.
+The Web rail button has one fixed gesture: **hold it for exactly 5 seconds**. Page-only mode leaves the web page as the only visible content and hides Android system bars. Android’s non-sticky default inset behavior and AndroidX predictive Back support ensure one Android Back gesture/button or a double tap on the page restores normal browser controls and normal system bars.
 
 ## Build and release
 

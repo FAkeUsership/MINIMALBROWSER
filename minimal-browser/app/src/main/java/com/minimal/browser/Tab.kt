@@ -1,6 +1,5 @@
 package com.minimal.browser
 
-import android.graphics.Bitmap
 import org.mozilla.geckoview.GeckoSession
 import java.util.UUID
 
@@ -31,8 +30,9 @@ class Tab(
     /** Per-page shield counters shown by the browser chrome. */
     var blockedAds: Int = 0
     var blockedTrackers: Int = 0
+    /** Keeps a delayed shield batch from being shown against a newer page. */
+    var blockedGeneration: Long = 0
 
-    var thumbnail: Bitmap? = null
     var sessionState: GeckoSession.SessionState? = null
 
     /** Last serializable session state, retained only for tab restore. */

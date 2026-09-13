@@ -14,8 +14,8 @@ android {
         // Android 8.0+; the bundled Mozilla engine itself is packaged in this APK.
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.2.1"
+        versionCode = 9
+        versionName = "1.2.2"
 
         // The requested release is intentionally ARM64-only. This makes the
         // APK substantial because it carries Gecko's native ARM64 libraries,
@@ -35,6 +35,12 @@ android {
 
     buildTypes {
         debug {
+            // Keep the proven debug-key signing path for the GitHub-only APK,
+            // but do not mark an end-user browser process as debuggable.
+            // This makes BuildConfig.DEBUG false and avoids debug-only runtime
+            // hooks without changing the installable ARM64 artifact flow.
+            isDebuggable = false
+            isJniDebuggable = false
             isMinifyEnabled = false
         }
         release {

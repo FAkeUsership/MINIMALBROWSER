@@ -13,7 +13,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -111,7 +110,8 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
         // Landscape is also locked in the manifest (android:screenOrientation).
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Do not force the display to stay on forever: web video can manage its
+        // own wake behavior, while idle browsing should follow device timeout.
 
         setContentView(buildUi())
         wireUp()
@@ -347,7 +347,8 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
             Screen.TABS -> {
                 rail.setActive(rail.tabs); topTitle.text = "Tabs"
-                TabManager.active?.let { TabManager.captureThumbnail(it) }
+                // Tab cards intentionally use their lightweight preview artwork.
+                // Do not make a full compositor readback just to open this screen.
                 tabsScreen.refresh(TabManager.tabs, TabManager.active?.id)
                 topCrumb.text = "${TabManager.tabs.size} open tabs"
             }
@@ -401,20 +402,21 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     /**
-     * Normal browser screens use normal Android system bars. In page-only mode
-     * system bars are immersive and any edge reveal automatically disappears
-     * again, like other Android full-screen apps.
+     * Normal browser screens use normal Android system bars. Page-only mode
+     * starts with both bars hidden, but deliberately uses Android's DEFAULT
+     * inset behavior rather than sticky/transient immersive behavior. The
+     * default keeps a gesture-navigation Back gesture active while bars are
+     * hidden, so one Back reaches the AndroidX callback below instead of first
+     * being consumed only to reveal a transient navigation bar.
      */
     private fun applySystemUi(pageOnly: Boolean = fullScreen || videoFullScreen) {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         WindowCompat.setDecorFitsSystemWindows(window, !pageOnly)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
         if (pageOnly) {
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.hide(WindowInsetsCompat.Type.displayCutout())
         } else {
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
             controller.show(WindowInsetsCompat.Type.systemBars())
             controller.show(WindowInsetsCompat.Type.displayCutout())
         }
@@ -433,10 +435,19 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         show(Screen.WEB)
     }
 
-    /** Android Back or a page double tap restores the usual browser UI. */
+    /**
+     * Android Back or a page double tap restores browser chrome and ordinary
+     * system bars. If page content also entered native video/full-screen while
+     * app page-only mode was active, leave that state in the same Back action;
+     * otherwise the page's full-screen state could consume the first exit.
+     */
     private fun exitPageOnly() {
         if (!fullScreen) return
         fullScreen = false
+        if (videoFullScreen) {
+            videoFullScreen = false
+            TabManager.exitPageFullScreen()
+        }
         webScreen.cancelEditing()
         applyFullScreen()
     }
@@ -452,13 +463,14 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             drawer.close()
             return
         }
-        if (videoFullScreen) {
-            TabManager.exitPageFullScreen()
+        if (fullScreen) {
+            // App page-only mode has priority over a page's own video state so a
+            // single physical/gesture Back always restores browser controls.
+            exitPageOnly()
             return
         }
-        if (fullScreen) {
-            // Physical/gesture Back is the direct way out of the clean page view.
-            exitPageOnly()
+        if (videoFullScreen) {
+            TabManager.exitPageFullScreen()
             return
         }
         if (current == Screen.LIST) {
@@ -544,21 +556,23 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         false
     }
 
-    /** Creates the one texture-backed visible compositor view on demand. */
+    /** Creates the one visible compositor view on demand. */
     private fun ensureGeckoView(): GeckoView? {
         geckoView?.let { return it }
         return try {
             object : GeckoView(this@MainActivity) {
                 override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-                    // Observe before Gecko's internal TextureView dispatches;
+                    // Observe before Gecko dispatches to its native child surface;
                     // this keeps the required page-only double tap reliable.
                     webScreen.observePageTouch(event)
                     return super.dispatchTouchEvent(event)
                 }
             }.apply {
-                // TextureView lets toolbar/banner overlays remain above content
-                // without SurfaceView z-order races on Android 14+.
-                setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
+                // GeckoView documents SurfaceView as its best-performance backend.
+                // Browser chrome is outside this surface, and the in-container
+                // banner stays a normal sibling overlay, so this avoids the extra
+                // TextureView copy/composition cost without sacrificing controls.
+                setViewBackend(GeckoView.BACKEND_SURFACE_VIEW)
             }.also { geckoView = it }
         } catch (error: Throwable) {
             Log.e("MinimalBrowser", "Unable to create GeckoView", error)

@@ -78,7 +78,10 @@ class BrowserApp : Application() {
                 .javaScriptEnabled(Prefs.javaScriptEnabled)
                 .webFontsEnabled(true)
                 .aboutConfigEnabled(false)
-                .remoteDebuggingEnabled(BuildConfig.DEBUG)
+                // This is an end-user browser build. Do not keep a remote
+                // DevTools endpoint and its associated bookkeeping alive while
+                // pages are rendering just because the APK is debug-signed.
+                .remoteDebuggingEnabled(false)
                 .consoleOutput(false)
                 .automaticFontSizeAdjustment(false)
                 .fontSizeFactor(Prefs.textSizePercent / 100f)

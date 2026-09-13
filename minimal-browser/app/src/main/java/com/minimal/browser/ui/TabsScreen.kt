@@ -1,7 +1,6 @@
 package com.minimal.browser.ui
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
 import android.util.TypedValue
@@ -18,9 +17,10 @@ import com.minimal.browser.R
 import com.minimal.browser.Tab
 
 /**
- * `#s-tabs` — "Open tabs" grid. Three columns of cards, each with a real
- * thumbnail (captured from the active page), the favicon letter, title and host, an ✕ to
- * close, plus the dashed "New tab" tile.
+ * `#s-tabs` — "Open tabs" grid. Three columns of lightweight cards with
+ * visual preview artwork, favicon letter, title and host, an ✕ to close, plus
+ * the dashed "New tab" tile. It intentionally avoids full-page screenshots
+ * so opening/switching tabs never forces a compositor readback.
  */
 class TabsScreen(context: Context) : LinearLayout(context) {
 
@@ -72,7 +72,6 @@ class TabsScreen(context: Context) : LinearLayout(context) {
                     title = t.displayTitle,
                     host = t.host.ifEmpty { "new tab" },
                     letter = t.faviconLetter,
-                    thumb = t.thumbnail,
                     gradient = i % 4,
                     chip = when (i % 4) {
                         0 -> context.color(R.color.f1)
@@ -94,7 +93,6 @@ class TabsScreen(context: Context) : LinearLayout(context) {
         val title: String,
         val host: String,
         val letter: String,
-        val thumb: Bitmap?,
         val gradient: Int,
         val chip: Int,
         val private: Boolean,
@@ -220,21 +218,16 @@ class TabsScreen(context: Context) : LinearLayout(context) {
                 val host = root.findViewWithTag<TextView>("host")
                 val close = root.findViewWithTag<TextView>("close")
 
-                if (card.thumb != null) {
-                    thumb.setImageBitmap(card.thumb)
-                    thumb.setBackgroundColor(Color.TRANSPARENT)
-                } else {
-                    thumb.setImageDrawable(null)
-                    thumb.setBackgroundColor(Color.TRANSPARENT)
-                    thumb.setBackgroundResource(
-                        when (card.gradient) {
-                            0 -> R.drawable.grad_t1
-                            1 -> R.drawable.grad_t2
-                            2 -> R.drawable.grad_t3
-                            else -> R.drawable.grad_t4
-                        }
-                    )
-                }
+                thumb.setImageDrawable(null)
+                thumb.setBackgroundColor(Color.TRANSPARENT)
+                thumb.setBackgroundResource(
+                    when (card.gradient) {
+                        0 -> R.drawable.grad_t1
+                        1 -> R.drawable.grad_t2
+                        2 -> R.drawable.grad_t3
+                        else -> R.drawable.grad_t4
+                    }
+                )
                 chip.text = if (card.private) "🕶" else card.letter
                 chip.background = context.roundRect(7, card.chip)
                 chip.setTextColor(if (card.chip == context.color(R.color.f4)) Color.BLACK else Color.WHITE)

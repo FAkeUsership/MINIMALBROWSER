@@ -19,6 +19,7 @@
     <application
         android:name=".BrowserApp"
         android:allowBackup="true"
+        android:enableOnBackInvokedCallback="true"
         android:hardwareAccelerated="true"
         android:extractNativeLibs="true"
         android:icon="@mipmap/ic_launcher"

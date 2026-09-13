@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.2 — Page-only Back and rendering/CPU optimization
+
+- Fixes the Android 14+ page-only exit path: page-only mode now uses Android’s non-sticky default inset behavior, keeps predictive Back enabled, and gives app page-only state priority over an incidental web-video full-screen state. One Back gesture/button restores browser chrome and normal system bars; the page double-tap exit remains available.
+- Replaces GeckoView’s lower-performance `TextureView` backend with its documented high-performance `SurfaceView` backend while preserving the one-visible-surface lifecycle and page-only touch observation.
+- Removes automatic full-frame `capturePixels()` tab screenshots on page load, tab switches, and the Tabs screen. Tab cards retain lightweight preview artwork without forcing GPU readback/scaling/allocation work into browsing interactions.
+- Coalesces a burst of blocked-resource events into one short-delayed UI update and one transactional database batch, uses one low-priority database worker instead of creating a thread per write, and avoids persisting blocked-request records from private tabs.
+- Indexes host-suffix ad/tracker rules and shares normalized URL checks, reducing repeated per-resource rule scans; coalesces browser progress-line layouts to one update per display frame.
+- Disables Gecko remote debugging, removes the app-wide keep-screen-on flag, and marks the GitHub-built end-user process non-debuggable; the workflow asserts that generated-APK property in addition to package, version, ARM64 `libxul.so`, extraction, size, and checksum checks.
+
 ## v1.2.1 — Bundled GeckoView ARM64 reconstruction
 
 - Restores Mozilla GeckoView as Minimal Browser’s bundled ARM64 browser engine; no Android System WebView renderer is used.

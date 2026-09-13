@@ -294,14 +294,34 @@ class WebScreen(context: Context) : LinearLayout(context) {
         blockedBanner.visibility = if (!pageOnly && tab.totalBlocked > 0) VISIBLE else GONE
     }
 
+    /**
+     * Gecko can deliver several progress values within one display interval.
+     * Keep only the newest value and lay out the thin progress line at most
+     * once per frame, rather than requesting a layout for every callback.
+     */
     fun setProgress(progress: Int) {
-        val p = progress.coerceIn(0, 100)
-        if (pageOnly) {
-            pendingProgress = p
-            return
-        }
+        pendingProgress = progress.coerceIn(0, 100)
+        if (pageOnly) return
+        scheduleProgressRender()
+    }
+
+    private var pendingProgress = 0
+    private var progressRenderScheduled = false
+    private val progressRenderRunnable = Runnable {
+        progressRenderScheduled = false
+        if (!pageOnly) renderProgress(pendingProgress)
+    }
+
+    private fun scheduleProgressRender() {
+        if (progressRenderScheduled) return
+        progressRenderScheduled = true
+        postOnAnimation(progressRenderRunnable)
+    }
+
+    private fun renderProgress(p: Int) {
         if (p > 0) {
             removeCallbacks(hideProgress)
+            progressTrack.animate().cancel()
             progressTrack.alpha = 1f
             progressTrack.visibility = VISIBLE
         }
@@ -311,13 +331,10 @@ class WebScreen(context: Context) : LinearLayout(context) {
                 width = (w * p / 100f).toInt()
             }
             progressFill.requestLayout()
-        } else {
-            pendingProgress = p
         }
         if (p >= 100) postDelayed(hideProgress, 350)
     }
 
-    private var pendingProgress = 0
     private val hideProgress = Runnable {
         progressTrack.animate().alpha(0f).setDuration(200).withEndAction {
             progressTrack.visibility = INVISIBLE
@@ -327,13 +344,13 @@ class WebScreen(context: Context) : LinearLayout(context) {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        if (w > 0 && pendingProgress > 0) setProgress(pendingProgress)
+        if (!pageOnly && w > 0 && pendingProgress > 0) scheduleProgressRender()
     }
 
     /**
      * Called from GeckoView.dispatchTouchEvent so page gestures are observed
-     * even when its internal TextureView consumes the touch stream. The event
-     * is never consumed here; Gecko still receives normal page interaction.
+     * even when Gecko's internal native surface consumes the touch stream. The
+     * event is never consumed here; Gecko still receives normal page interaction.
      */
     fun observePageTouch(event: MotionEvent) {
         if (pageOnly) pageGestureDetector.onTouchEvent(event)
@@ -349,6 +366,10 @@ class WebScreen(context: Context) : LinearLayout(context) {
         webDivider.visibility = if (on) GONE else VISIBLE
         progressTrack.visibility = if (on) GONE else INVISIBLE
         if (on) {
+            removeCallbacks(progressRenderRunnable)
+            removeCallbacks(hideProgress)
+            progressTrack.animate().cancel()
+            progressRenderScheduled = false
             blockedBanner.visibility = GONE
             cancelEditing()
         }

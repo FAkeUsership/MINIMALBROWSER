@@ -2,6 +2,7 @@ package com.minimal.browser
 
 import android.content.Context
 import android.net.Uri
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -13,15 +14,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   `/pattern`     → substring rule (matches anywhere in the URL)
  *   `##` header line selects the bucket: `## ad` or `## tracker`
  *
- * Every rule is evaluated *before* the request leaves the device, which is the
- * whole point of the shield pill in the top bar.
+ * This path is exercised for many subresources on a modern page, so host rules
+ * are indexed and matched label-by-label instead of linearly testing every
+ * suffix rule for every request.
  */
 object AdBlocker {
 
-    private class Rules(val hosts: Array<String>, val patterns: Array<String>)
+    private class Rules(val hosts: Set<String>, val patterns: Array<String>)
 
-    @Volatile private var adRules = Rules(emptyArray(), emptyArray())
-    @Volatile private var trackerRules = Rules(emptyArray(), emptyArray())
+    @Volatile private var adRules = Rules(emptySet(), emptyArray())
+    @Volatile private var trackerRules = Rules(emptySet(), emptyArray())
     private val loaded = AtomicBoolean(false)
 
     fun init(context: Context) {
@@ -35,9 +37,9 @@ object AdBlocker {
     }
 
     private fun parse(text: String) {
-        val adHosts = ArrayList<String>()
+        val adHosts = LinkedHashSet<String>()
         val adPats = ArrayList<String>()
-        val trHosts = ArrayList<String>()
+        val trHosts = LinkedHashSet<String>()
         val trPats = ArrayList<String>()
         var bucketTracker = false
 
@@ -51,20 +53,22 @@ object AdBlocker {
             when {
                 line.startsWith("||") && line.endsWith("^") -> {
                     val host = line.removePrefix("||").removeSuffix("^")
+                        .lowercase(Locale.ROOT)
                     if (host.isNotEmpty()) (if (bucketTracker) trHosts else adHosts).add(host)
                 }
                 line.startsWith("/") -> {
-                    val p = line.trim('/')
-                    if (p.isNotEmpty()) (if (bucketTracker) trPats else adPats).add(p)
+                    val pattern = line.trim('/').lowercase(Locale.ROOT)
+                    if (pattern.isNotEmpty()) (if (bucketTracker) trPats else adPats).add(pattern)
                 }
                 else -> {
-                    // bare domain, treat as a host-suffix rule
-                    (if (bucketTracker) trHosts else adHosts).add(line)
+                    // Bare domains retain the documented host-suffix behavior.
+                    val host = line.lowercase(Locale.ROOT)
+                    if (host.isNotEmpty()) (if (bucketTracker) trHosts else adHosts).add(host)
                 }
             }
         }
-        adRules = Rules(adHosts.toTypedArray(), adPats.toTypedArray())
-        trackerRules = Rules(trHosts.toTypedArray(), trPats.toTypedArray())
+        adRules = Rules(adHosts, adPats.toTypedArray())
+        trackerRules = Rules(trHosts, trPats.toTypedArray())
     }
 
     val isReady: Boolean get() = loaded.get()
@@ -77,31 +81,64 @@ object AdBlocker {
 
     fun check(url: String?): Verdict {
         if (url.isNullOrEmpty() || !Prefs.shieldsOn) return Verdict.ALLOW
-        val host = try {
-            Uri.parse(url).host?.lowercase()
-        } catch (e: Exception) {
+        val requestUrl = url ?: return Verdict.ALLOW
+
+        val blockAds = Prefs.blockAds
+        val blockFingerprinting = Prefs.blockFingerprinting
+        if (!blockAds && !blockFingerprinting) return Verdict.ALLOW
+
+        val host = if (blockAds) {
+            try {
+                Uri.parse(requestUrl).host?.lowercase(Locale.ROOT)
+            } catch (e: Exception) {
+                null
+            }
+        } else {
             null
-        } ?: return Verdict.ALLOW
-        // Ad/tracker blocking is one switch. Fingerprinting has its own explicit
-        // setting so turning that setting off does not silently keep blocking it.
-        if (Prefs.blockAds && matches(adRules, url, host)) return Verdict.BLOCK_AD
-        if (Prefs.blockAds && matches(trackerRules, url, host)) return Verdict.BLOCK_TRACKER
-        if (Prefs.blockFingerprinting && isFingerprintEndpoint(url)) return Verdict.BLOCK_TRACKER
+        }
+
+        // A local variable ensures that substring and fingerprint checks share
+        // one normalized URL instead of repeatedly doing case-insensitive scans.
+        var normalizedUrl: String? = null
+        fun normalized(): String = normalizedUrl ?: requestUrl.lowercase(Locale.ROOT).also {
+            normalizedUrl = it
+        }
+
+        if (blockAds && host != null) {
+            if (matchesHost(adRules.hosts, host)) return Verdict.BLOCK_AD
+            if (adRules.patterns.isNotEmpty() && matchesPatterns(adRules.patterns, normalized())) {
+                return Verdict.BLOCK_AD
+            }
+            if (matchesHost(trackerRules.hosts, host)) return Verdict.BLOCK_TRACKER
+            if (trackerRules.patterns.isNotEmpty() && matchesPatterns(trackerRules.patterns, normalized())) {
+                return Verdict.BLOCK_TRACKER
+            }
+        }
+
+        if (blockFingerprinting && isFingerprintEndpoint(normalized())) {
+            return Verdict.BLOCK_TRACKER
+        }
         return Verdict.ALLOW
     }
 
-    private fun isFingerprintEndpoint(url: String): Boolean {
-        val u = url.lowercase()
-        return "/fingerprint" in u || "fingerprint.js" in u ||
-            "device-fingerprint" in u || "canvas-fingerprint" in u
+    private fun isFingerprintEndpoint(normalizedUrl: String): Boolean =
+        "/fingerprint" in normalizedUrl || "fingerprint.js" in normalizedUrl ||
+            "device-fingerprint" in normalizedUrl || "canvas-fingerprint" in normalizedUrl
+
+    /** Check `a.b.example` as a, b, and example suffixes against a hash set. */
+    private fun matchesHost(hosts: Set<String>, host: String): Boolean {
+        var candidate = host
+        while (true) {
+            if (candidate in hosts) return true
+            val dot = candidate.indexOf('.')
+            if (dot < 0 || dot == candidate.lastIndex) return false
+            candidate = candidate.substring(dot + 1)
+        }
     }
 
-    private fun matches(rules: Rules, url: String, host: String): Boolean {
-        for (h in rules.hosts) {
-            if (host == h || host.endsWith(".$h")) return true
-        }
-        for (p in rules.patterns) {
-            if (url.contains(p, ignoreCase = true)) return true
+    private fun matchesPatterns(patterns: Array<String>, normalizedUrl: String): Boolean {
+        for (pattern in patterns) {
+            if (normalizedUrl.contains(pattern)) return true
         }
         return false
     }

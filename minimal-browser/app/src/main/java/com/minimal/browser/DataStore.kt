@@ -21,7 +21,7 @@ data class TabRow(val id: String, val url: String, val title: String, val privat
 /* ------------------------------------------------------------------ */
 
 class DataStore private constructor(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "minimal_browser.db", null, 1) {
+    SQLiteOpenHelper(context.applicationContext, "minimal_browser.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -57,7 +57,8 @@ class DataStore private constructor(context: Context) :
                    _id INTEGER PRIMARY KEY AUTOINCREMENT,
                    ts INTEGER NOT NULL,
                    host TEXT NOT NULL DEFAULT '',
-                   kind TEXT NOT NULL
+                   kind TEXT NOT NULL,
+                   count INTEGER NOT NULL DEFAULT 1
                )"""
         )
         db.execSQL("CREATE INDEX idx_blocked_ts ON blocked(ts)")
@@ -73,7 +74,11 @@ class DataStore private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // v1 — nothing to migrate yet.
+        if (oldVersion < 2) {
+            // Existing v1 rows each represented one request, so their default
+            // count preserves the historical daily total exactly.
+            db.execSQL("ALTER TABLE blocked ADD COLUMN count INTEGER NOT NULL DEFAULT 1")
+        }
     }
 
     /* ---------------- history ---------------- */
@@ -171,18 +176,39 @@ class DataStore private constructor(context: Context) :
 
     /* ---------------- blocked counters ---------------- */
 
-    fun recordBlocked(host: String, kind: String) {
-        val cv = ContentValues().apply {
-            put("ts", System.currentTimeMillis())
-            put("host", host)
-            put("kind", kind)
+    /**
+     * Persists one compact row per host/kind batch rather than one transaction
+     * for every blocked subresource. `count` keeps the Home total exact while
+     * avoiding tracker-heavy pages creating a large SQLite write queue.
+     */
+    fun recordBlockedBatch(counts: Map<Pair<String, String>, Int>) {
+        if (counts.isEmpty()) return
+        val db = writableDatabase
+        val now = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            for ((key, count) in counts) {
+                if (count <= 0) continue
+                val (host, kind) = key
+                val cv = ContentValues().apply {
+                    put("ts", now)
+                    put("host", host)
+                    put("kind", kind)
+                    put("count", count)
+                }
+                db.insert("blocked", null, cv)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
-        writableDatabase.insert("blocked", null, cv)
     }
 
     fun blockedSince(ts: Long): Int = readableDatabase.rawQuery(
-        "SELECT COUNT(*) FROM blocked WHERE ts >= ?", arrayOf(ts.toString())
-    ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        "SELECT COALESCE(SUM(count), 0) FROM blocked WHERE ts >= ?", arrayOf(ts.toString())
+    ).use {
+        if (it.moveToFirst()) it.getLong(0).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() else 0
+    }
 
     fun clearBlocked() {
         writableDatabase.delete("blocked", null, null)

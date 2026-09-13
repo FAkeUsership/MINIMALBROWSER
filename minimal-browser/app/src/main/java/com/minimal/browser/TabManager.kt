@@ -1,7 +1,6 @@
 package com.minimal.browser
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -16,6 +15,7 @@ import org.mozilla.geckoview.StorageController
 import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 import java.util.UUID
+import java.util.concurrent.Executors
 
 /**
  * Multi-tab controller for the bundled GeckoView engine.
@@ -28,7 +28,28 @@ import java.util.UUID
 object TabManager {
 
     private const val TAG = "TabManager"
+    private const val BLOCKED_BATCH_DELAY_MS = 120L
     private val main = Handler(Looper.getMainLooper())
+
+    // One low-priority worker replaces the old one-new-thread-per-write model.
+    // In particular, a tracker-heavy page can generate many block events at once.
+    private val storageExecutor = Executors.newSingleThreadExecutor { work ->
+        Thread(work, "minimal-browser-store").apply {
+            priority = Thread.NORM_PRIORITY - 1
+        }
+    }
+
+    private data class BlockedSignal(
+        val tab: Tab,
+        val generation: Long,
+        val kind: String,
+        val host: String
+    )
+    private data class BlockedDelta(var ads: Int = 0, var trackers: Int = 0)
+    private val blockedSignalLock = Any()
+    private val pendingBlockedSignals = ArrayList<BlockedSignal>()
+    private var blockedFlushScheduled = false
+    private val blockedFlushRunnable = Runnable { flushBlockedSignals() }
 
     val tabs = mutableListOf<Tab>()
     var active: Tab? = null
@@ -184,7 +205,8 @@ object TabManager {
         }
         val previous = active
         if (previous != null) {
-            captureThumbnail(previous)
+            // Do not force a full-frame GPU readback while the user is switching
+            // tabs. Inactive sessions are simply deactivated.
             setSessionActive(previous, false)
         }
         active = tab
@@ -382,62 +404,17 @@ object TabManager {
     }
 
     /* ------------------------------------------------------------------ */
-    /*  thumbnails and URL-only restore                                   */
+    /*  URL-only restore                                                   */
     /* ------------------------------------------------------------------ */
 
-    /**
-     * Captures only the session currently rendered by the one visible GeckoView.
-     * Never acquire a second GeckoDisplay: GeckoView already owns the display and
-     * a competing acquireDisplay() is both invalid and a compositor-risk path.
-     */
-    fun captureThumbnail(tab: Tab) {
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            main.post { captureThumbnail(tab) }
-            return
-        }
-        val view = attachedView ?: return
-        if (!tabs.contains(tab) || active !== tab || view.session !== tab.session || !view.isAttachedToWindow) {
-            return
-        }
-        val capturedSession = tab.session
-        try {
-            view.capturePixels().accept(
-                { bitmap ->
-                    if (bitmap != null) {
-                        Thread({
-                            val width = bitmap.width.coerceAtMost(360).coerceAtLeast(1)
-                            val height = (bitmap.height * (width.toDouble() / bitmap.width))
-                                .toInt().coerceAtLeast(1)
-                            val scaled = try {
-                                Bitmap.createScaledBitmap(bitmap, width, height, true)
-                            } catch (error: Throwable) {
-                                Log.w(TAG, "thumbnail scale failed", error)
-                                bitmap
-                            }
-                            if (scaled !== bitmap) runCatching { bitmap.recycle() }
-                            main.post {
-                                if (tabs.contains(tab) && tab.session === capturedSession) {
-                                    // RecyclerView can still draw the previous thumbnail for
-                                    // one frame, so avoid recycling it underneath the UI.
-                                    tab.thumbnail = scaled
-                                    host?.onTabsChanged()
-                                } else {
-                                    runCatching { scaled.recycle() }
-                                }
-                            }
-                        }, "minimal-browser-thumbnail").start()
-                    }
-                },
-                { error -> Log.w(TAG, "thumbnail capture failed", error) }
-            )
-        } catch (error: Throwable) {
-            Log.w(TAG, "thumbnail capture setup failed", error)
-        }
-    }
+    // Tab cards use lightweight artwork instead of automatic full-frame
+    // compositor screenshots. Screenshot readback forces a GPU/CPU sync and
+    // used to run during switching and page loading, directly competing with
+    // scroll and first-paint work.
 
     /** Persist only URLs/titles. Restoring opaque native window state was removed deliberately. */
     fun persist() {
-        val context = host?.activeContext() ?: return
+        val context = host?.activeContext()?.applicationContext ?: return
         val snapshot = tabs.map { tab ->
             TabRow(tab.id, tab.url, tab.title, tab.private, null)
         }
@@ -476,9 +453,6 @@ object TabManager {
     }
 
     private fun destroyTab(tab: Tab) {
-        // A tab-card ImageView can retain a previous thumbnail until its next
-        // layout pass. Clearing the reference avoids a recycled-bitmap draw race.
-        tab.thumbnail = null
         runCatching { tab.session.close() }
             .onFailure { Log.w(TAG, "could not close GeckoSession", it) }
     }
@@ -606,6 +580,7 @@ object TabManager {
             }
             tab.blockedAds = 0
             tab.blockedTrackers = 0
+            tab.blockedGeneration++
             if (active === tab) {
                 host?.onProgress(tab, 10)
                 host?.onActiveTabChanged(tab)
@@ -625,7 +600,6 @@ object TabManager {
                 host?.onPageFinished(tab, successful)
                 host?.onActiveTabChanged(tab)
             }
-            if (successful) captureThumbnail(tab)
         }
 
         override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
@@ -649,9 +623,13 @@ object TabManager {
         override fun onTitleChange(session: GeckoSession, title: String?) {
             if (!isCurrent(tab, session)) return
             title?.trim()?.takeIf { it.isNotEmpty() }?.let { tab.title = it }
-            if (!tab.private && tab.url.isNotBlank() && tab.title.isNotBlank()) {
-                host?.activeContext()?.let { context ->
-                    background { DataStore.get(context).retitle(tab.url, tab.title) }
+            // Snapshot mutable tab values before the serialized worker handles
+            // this write; a later navigation must not retitle the wrong URL.
+            val pageUrl = tab.url
+            val pageTitle = tab.title
+            if (!tab.private && pageUrl.isNotBlank() && pageTitle.isNotBlank()) {
+                host?.activeContext()?.applicationContext?.let { context ->
+                    background { DataStore.get(context).retitle(pageUrl, pageTitle) }
                 }
             }
             if (active === tab) host?.onActiveTabChanged(tab)
@@ -671,20 +649,15 @@ object TabManager {
             val context = host?.activeContext() ?: return
             val name = Downloads.start(context, response) ?: return
             if (!tab.private) {
+                val downloadUrl = response.uri.orEmpty()
+                val mime = response.headers["Content-Type"].orEmpty()
+                val bytes = response.headers["Content-Length"]?.toLongOrNull() ?: -1L
+                val storeContext = context.applicationContext
                 background {
-                    DataStore.get(context).addDownload(
-                        name,
-                        response.uri.orEmpty(),
-                        response.headers["Content-Type"].orEmpty(),
-                        response.headers["Content-Length"]?.toLongOrNull() ?: -1L
-                    )
+                    DataStore.get(storeContext).addDownload(name, downloadUrl, mime, bytes)
                 }
             }
             host?.onDownloadStarted(name)
-        }
-
-        override fun onFirstContentfulPaint(session: GeckoSession) {
-            if (isCurrent(tab, session)) main.postDelayed({ captureThumbnail(tab) }, 350)
         }
 
         override fun onCrash(session: GeckoSession) {
@@ -719,8 +692,9 @@ object TabManager {
             if (!isCurrent(tab, session) || tab.private || url.startsWith("about:")) {
                 return GeckoResult.fromValue(false)
             }
-            host?.activeContext()?.let { context ->
-                background { DataStore.get(context).recordVisit(url, tab.title) }
+            val title = tab.title
+            host?.activeContext()?.applicationContext?.let { context ->
+                background { DataStore.get(context).recordVisit(url, title) }
             }
             return GeckoResult.fromValue(true)
         }
@@ -790,26 +764,70 @@ object TabManager {
         }
     }
 
+    /**
+     * A content-blocking delegate can report many resources in one page burst,
+     * and may not be on the Android main thread. Coalesce those signals first;
+     * do not post a UI task and start a new database thread for every URL.
+     */
     private fun reportBlocked(tab: Tab, kind: String, url: String?) {
-        val pageHost = UrlBar.hostOf(url)
-        main.post {
-            if (!tabs.contains(tab)) return@post
-            if (kind == "ad") tab.blockedAds++ else tab.blockedTrackers++
-            host?.activeContext()?.let { context ->
-                background { DataStore.get(context).recordBlocked(pageHost, kind) }
+        val signal = BlockedSignal(tab, tab.blockedGeneration, kind, UrlBar.hostOf(url))
+        synchronized(blockedSignalLock) {
+            pendingBlockedSignals += signal
+            if (!blockedFlushScheduled) {
+                blockedFlushScheduled = true
+                main.postDelayed(blockedFlushRunnable, BLOCKED_BATCH_DELAY_MS)
             }
-            if (active === tab) host?.onBlockedOnPage(tab)
-            host?.onBlockedTotal(kind, pageHost)
+        }
+    }
+
+    /** Runs on the main loop once per short burst, not once per blocked request. */
+    private fun flushBlockedSignals() {
+        val signals = synchronized(blockedSignalLock) {
+            blockedFlushScheduled = false
+            ArrayList(pendingBlockedSignals).also { pendingBlockedSignals.clear() }
+        }
+        if (signals.isEmpty()) return
+
+        val tabDeltas = LinkedHashMap<Tab, BlockedDelta>()
+        val databaseDeltas = LinkedHashMap<Pair<String, String>, Int>()
+        for (signal in signals) {
+            // A closed tab no longer needs UI or persistent accounting. The
+            // check is deliberately on the main loop because `tabs` is UI state.
+            if (!tabs.contains(signal.tab) || signal.generation != signal.tab.blockedGeneration) continue
+            val delta = tabDeltas.getOrPut(signal.tab) { BlockedDelta() }
+            if (signal.kind == "ad") delta.ads++ else delta.trackers++
+            // Private browsing must not leave a blocked-request history behind.
+            if (!signal.tab.private) {
+                val key = signal.host to signal.kind
+                databaseDeltas[key] = (databaseDeltas[key] ?: 0) + 1
+            }
+        }
+        if (tabDeltas.isEmpty()) return
+
+        for ((tab, delta) in tabDeltas) {
+            tab.blockedAds += delta.ads
+            tab.blockedTrackers += delta.trackers
+        }
+
+        val currentHost = host
+        currentHost?.activeContext()?.applicationContext?.let { context ->
+            if (databaseDeltas.isNotEmpty()) {
+                background { DataStore.get(context).recordBlockedBatch(databaseDeltas) }
+            }
+        }
+        tabDeltas.keys.firstOrNull { it === active }?.let { currentHost?.onBlockedOnPage(it) }
+        for ((key, _) in databaseDeltas) {
+            currentHost?.onBlockedTotal(key.second, key.first)
         }
     }
 
     private fun background(block: () -> Unit) {
-        Thread({
+        storageExecutor.execute {
             try {
                 block()
             } catch (error: Throwable) {
                 Log.w(TAG, "background work failed", error)
             }
-        }, "minimal-browser-store").start()
+        }
     }
 }
