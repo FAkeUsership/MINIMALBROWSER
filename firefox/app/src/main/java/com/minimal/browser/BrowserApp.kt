@@ -1,1 +1,194 @@
-cGFja2FnZSBjb20ubWluaW1hbC5icm93c2VyCgppbXBvcnQgYW5kcm9pZC5hcHAuQXBwbGljYXRpb24KaW1wb3J0IGFuZHJvaWQudXRpbC5Mb2cKaW1wb3J0IG9yZy5tb3ppbGxhLmdlY2tvdmlldy5Db250ZW50QmxvY2tpbmcKaW1wb3J0IG9yZy5tb3ppbGxhLmdlY2tvdmlldy5HZWNrb1Jlc3VsdAppbXBvcnQgb3JnLm1vemlsbGEuZ2Vja292aWV3LkdlY2tvUnVudGltZQppbXBvcnQgb3JnLm1vemlsbGEuZ2Vja292aWV3LkdlY2tvUnVudGltZVNldHRpbmdzCgovKioKICogT3ducyB0aGUgc2luZ2xlIEdlY2tvUnVudGltZSAodGhlIEZpcmVmb3ggZW5naW5lKSBmb3IgdGhlIHdob2xlIHByb2Nlc3MgYW5kCiAqIGtlZXBzIHRoZSBwcml2YWN5IHNldHRpbmdzIGluIHN5bmMgd2l0aCB0aGUgU2V0dGluZ3Mgc2NyZWVuLgogKi8KY2xhc3MgQnJvd3NlckFwcCA6IEFwcGxpY2F0aW9uKCkgewoKICAgIGNvbXBhbmlvbiBvYmplY3QgewogICAgICAgIHByaXZhdGUgY29uc3QgdmFsIFRBRyA9ICJNaW5pbWFsQnJvd3NlciIKCiAgICAgICAgQFZvbGF0aWxlCiAgICAgICAgdmFyIHJ1bnRpbWU6IEdlY2tvUnVudGltZT8gPSBudWxsCiAgICAgICAgICAgIHByaXZhdGUgc2V0CgogICAgICAgIC8qKiBOb24tbnVsbCB3aGVuIHRoZSBlbmdpbmUgZmFpbGVkIHRvIHN0YXJ0OyBzdXJmYWNlZCB0byB0aGUgdXNlciBpbiB0aGUgVUkuICovCiAgICAgICAgQFZvbGF0aWxlCiAgICAgICAgdmFyIHN0YXJ0dXBGYWlsdXJlOiBTdHJpbmc/ID0gbnVsbAogICAgICAgICAgICBwcml2YXRlIHNldAoKICAgICAgICBmdW4gcmVxdWlyZVJ1bnRpbWUoKTogR2Vja29SdW50aW1lID0KICAgICAgICAgICAgcnVudGltZSA/OiB0aHJvdyBJbGxlZ2FsU3RhdGVFeGNlcHRpb24oCiAgICAgICAgICAgICAgICAiR2Vja29SdW50aW1lIGlzIG5vdCBhdmFpbGFibGUke3N0YXJ0dXBGYWlsdXJlPy5sZXQgeyAiICgkaXQpIiB9ID86ICIifSIKICAgICAgICAgICAgKQoKICAgICAgICAvKiogVHJ1ZSB3aGVuIGEgcGFnZSBjYW4gYWN0dWFsbHkgYmUgcmVuZGVyZWQuIEd1YXJkcyB0aGUgd2ViIHNjcmVlbi4gKi8KICAgICAgICB2YWwgZW5naW5lUmVhZHk6IEJvb2xlYW4gZ2V0KCkgPSBydW50aW1lICE9IG51bGwKICAgIH0KCiAgICBvdmVycmlkZSBmdW4gb25DcmVhdGUoKSB7CiAgICAgICAgc3VwZXIub25DcmVhdGUoKQogICAgICAgIC8vIEluc3RhbGwgZmlyc3Q6IGlmIGVuZ2luZSBzdGFydHVwIGl0c2VsZiBmYWlscyB3ZSB3YW50IHRoZSB0cmFjZSwgbm90IGEKICAgICAgICAvLyBzaWxlbnQgYmxhY2sgc2NyZWVuLgogICAgICAgIENyYXNoUmVwb3J0ZXIuaW5zdGFsbCh0aGlzKQogICAgICAgIFByZWZzLmluaXQodGhpcykKICAgICAgICB0cnkgewogICAgICAgICAgICBjcmVhdGVSdW50aW1lKCkKICAgICAgICB9IGNhdGNoIChlOiBUaHJvd2FibGUpIHsKICAgICAgICAgICAgLy8gQSBHZWNrb1J1bnRpbWUgdGhhdCBjYW5ub3Qgc3RhcnQgbXVzdCBub3QgdGFrZSB0aGUgcHJvY2VzcyB3aXRoIGl0OgogICAgICAgICAgICAvLyB0aGUgVUkgKGhvbWUsIHRhYnMsIHNldHRpbmdzKSBpcyBzdGlsbCB1c2VmdWwsIGFuZCB0aGUgbWVzc2FnZSB0ZWxscwogICAgICAgICAgICAvLyB0aGUgdXNlciB3aHkgcGFnZXMgd2lsbCBub3QgbG9hZC4KICAgICAgICAgICAgcnVudGltZSA9IG51bGwKICAgICAgICAgICAgTG9nLmUoVEFHLCAiR2Vja29SdW50aW1lLmNyZWF0ZSBmYWlsZWQiLCBlKQogICAgICAgICAgICBzdGFydHVwRmFpbHVyZSA9ICIke2UuamF2YUNsYXNzLnNpbXBsZU5hbWV9OiAke2UubWVzc2FnZX0iCiAgICAgICAgfQogICAgfQoKICAgIC8qIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSAqLwoKICAgIHByaXZhdGUgZnVuIGNyZWF0ZVJ1bnRpbWUoKSB7CiAgICAgICAgaWYgKHJ1bnRpbWUgIT0gbnVsbCkgcmV0dXJuCgogICAgICAgIHZhbCBjYlNldHRpbmdzID0gQ29udGVudEJsb2NraW5nLlNldHRpbmdzLkJ1aWxkZXIoKQogICAgICAgICAgICAvLyBBZHMsIGFuYWx5dGljcywgc29jaWFsICsgY29udGVudCB0cmFja2VycywgY3J5cHRvbWluaW5nLgogICAgICAgICAgICAuYW50aVRyYWNraW5nKAogICAgICAgICAgICAgICAgQ29udGVudEJsb2NraW5nLkFudGlUcmFja2luZy5BRCBvcgogICAgICAgICAgICAgICAgICAgIENvbnRlbnRCbG9ja2luZy5BbnRpVHJhY2tpbmcuQU5BTFlUSUMgb3IKICAgICAgICAgICAgICAgICAgICBDb250ZW50QmxvY2tpbmcuQW50aVRyYWNraW5nLlNPQ0lBTCBvcgogICAgICAgICAgICAgICAgICAgIENvbnRlbnRCbG9ja2luZy5BbnRpVHJhY2tpbmcuQ09OVEVOVCBvcgogICAgICAgICAgICAgICAgICAgIENvbnRlbnRCbG9ja2luZy5BbnRpVHJhY2tpbmcuQ1JZUFRPTUlOSU5HIG9yCiAgICAgICAgICAgICAgICAgICAgQ29udGVudEJsb2NraW5nLkFudGlUcmFja2luZy5TVFAgb3IKICAgICAgICAgICAgICAgICAgICBDb250ZW50QmxvY2tpbmcuQW50aVRyYWNraW5nLkZJTkdFUlBSSU5USU5HCiAgICAgICAgICAgICkKICAgICAgICAgICAgLmVuaGFuY2VkVHJhY2tpbmdQcm90ZWN0aW9uTGV2ZWwoQ29udGVudEJsb2NraW5nLkV0cExldmVsLlNUUklDVCkKICAgICAgICAgICAgLmNvb2tpZUJlaGF2aW9yKENvbnRlbnRCbG9ja2luZy5Db29raWVCZWhhdmlvci5BQ0NFUFRfRklSU1RfUEFSVFlfQU5EX0lTT0xBVEVfT1RIRVJTKQogICAgICAgICAgICAuY29va2llUHVyZ2luZyh0cnVlKQogICAgICAgICAgICAuc2FmZUJyb3dzaW5nKENvbnRlbnRCbG9ja2luZy5TYWZlQnJvd3NpbmcuREVGQVVMVCkKICAgICAgICAgICAgLmJ1aWxkKCkKCiAgICAgICAgdmFsIGJ1aWxkZXIgPSBHZWNrb1J1bnRpbWVTZXR0aW5ncy5CdWlsZGVyKCkKICAgICAgICAgICAgLy8gRmlyZWZveCBwcmVmczogaHR0cHMtZmlyc3QgZXZlcnl3aGVyZSwgYW5kIG5vIHRlbGVtZXRyeSBob21lIHBob25lLgogICAgICAgICAgICAuYXJndW1lbnRzKAogICAgICAgICAgICAgICAgYXJyYXlPZigKICAgICAgICAgICAgICAgICAgICAiLXByZWYiLCAiZG9tLnNlY3VyaXR5Lmh0dHBzX29ubHlfbW9kZT10cnVlIiwKICAgICAgICAgICAgICAgICAgICAiLXByZWYiLCAiZG9tLnNlY3VyaXR5Lmh0dHBzX29ubHlfbW9kZV9wYm09dHJ1ZSIKICAgICAgICAgICAgICAgICkKICAgICAgICAgICAgKQogICAgICAgICAgICAuamF2YVNjcmlwdEVuYWJsZWQoUHJlZnMuamF2YVNjcmlwdEVuYWJsZWQpCiAgICAgICAgICAgIC53ZWJGb250c0VuYWJsZWQodHJ1ZSkKICAgICAgICAgICAgLmFib3V0Q29uZmlnRW5hYmxlZChmYWxzZSkKICAgICAgICAgICAgLnJlbW90ZURlYnVnZ2luZ0VuYWJsZWQoQnVpbGRDb25maWcuREVCVUcpCiAgICAgICAgICAgIC5jb25zb2xlT3V0cHV0KGZhbHNlKQogICAgICAgICAgICAuYXV0b21hdGljRm9udFNpemVBZGp1c3RtZW50KGZhbHNlKQogICAgICAgICAgICAuZm9udFNpemVGYWN0b3IoUHJlZnMudGV4dFNpemVQZXJjZW50IC8gMTAwZikKICAgICAgICAgICAgLmlucHV0QXV0b1pvb21FbmFibGVkKHRydWUpCiAgICAgICAgICAgIC5kb3VibGVUYXBab29taW5nRW5hYmxlZCh0cnVlKQogICAgICAgICAgICAuY29udGVudEJsb2NraW5nKGNiU2V0dGluZ3MpCiAgICAgICAgICAgIC5wcmVmZXJyZWRDb2xvclNjaGVtZSgKICAgICAgICAgICAgICAgIGlmIChQcmVmcy5id1RoZW1lKSBHZWNrb1J1bnRpbWVTZXR0aW5ncy5DT0xPUl9TQ0hFTUVfREFSSwogICAgICAgICAgICAgICAgZWxzZSBHZWNrb1J1bnRpbWVTZXR0aW5ncy5DT0xPUl9TQ0hFTUVfU1lTVEVNCiAgICAgICAgICAgICkKCiAgICAgICAgdmFsIHNldHRpbmdzID0gYnVpbGRlci5idWlsZCgpCiAgICAgICAgcnVudGltZSA9IEdlY2tvUnVudGltZS5jcmVhdGUodGhpcywgc2V0dGluZ3MpCgogICAgICAgIC8vIFNldHRpbmdzIHRoYXQgb25seSBleGlzdCBhcyBzZXR0ZXJzIG9uIHRoZSBidWlsdCBzZXR0aW5ncyBvYmplY3QuCiAgICAgICAgYXBwbHlIdHRwc09ubHkoc2V0dGluZ3MpCiAgICAgICAgYXBwbHlGaW5nZXJwcmludGluZyhzZXR0aW5ncykKCiAgICAgICAgLy8gTG9jYWwsIGJ1bmRsZWQgRWFzeUxpc3QvRWFzeVByaXZhY3ktc3R5bGUgYmxvY2sgbGlzdCAocmVxdWVzdC1sZXZlbCkuCiAgICAgICAgQWRCbG9ja2VyLmluaXQodGhpcykKICAgICAgICBMb2cuaShUQUcsICJHZWNrb1J1bnRpbWUgcmVhZHkiKQogICAgfQoKICAgIC8qKiBodHRwcy1vbmx5IG1vZGU7IGd1YXJkZWQgc28gaXQgZGVncmFkZXMgZ3JhY2VmdWxseSBvbiBhbnkgZW5naW5lIGJ1aWxkLiAqLwogICAgcHJpdmF0ZSBmdW4gYXBwbHlIdHRwc09ubHkoc2V0dGluZ3M6IEdlY2tvUnVudGltZVNldHRpbmdzKSB7CiAgICAgICAgdmFsIG1vZGUgPSBpZiAoUHJlZnMuaHR0cHNPbmx5KSB7CiAgICAgICAgICAgIEdlY2tvUnVudGltZVNldHRpbmdzLkhUVFBTX09OTFkKICAgICAgICB9IGVsc2UgewogICAgICAgICAgICAwIC8vIEhUVFBTX09OTFlfRElTQUJMRUQKICAgICAgICB9CiAgICAgICAgdHJ5IHsKICAgICAgICAgICAgdmFsIG0gPSBHZWNrb1J1bnRpbWVTZXR0aW5nczo6Y2xhc3MuamF2YS5nZXRNZXRob2QoInNldEh0dHBzT25seU1vZGUiLCBJbnQ6OmNsYXNzLmphdmFQcmltaXRpdmVUeXBlKQogICAgICAgICAgICBtLmludm9rZShzZXR0aW5ncywgbW9kZSkKICAgICAgICB9IGNhdGNoIChlOiBUaHJvd2FibGUpIHsKICAgICAgICAgICAgTG9nLncoVEFHLCAiaHR0cHMtb25seSBwcmVmIHVuYXZhaWxhYmxlOiAke2UubWVzc2FnZX0iKQogICAgICAgIH0KICAgIH0KCiAgICAvKiogRmlyZWZveCdzIGZpbmdlcnByaW50aW5nIHJlc2lzdGFuY2UgKHRoZSAiQmxvY2sgZmluZ2VycHJpbnRpbmciIHJvdykuICovCiAgICBwcml2YXRlIGZ1biBhcHBseUZpbmdlcnByaW50aW5nKHNldHRpbmdzOiBHZWNrb1J1bnRpbWVTZXR0aW5ncykgewogICAgICAgIHNldHRpbmdzLnNldEZpbmdlcnByaW50aW5nUHJvdGVjdGlvbihQcmVmcy5ibG9ja0ZpbmdlcnByaW50aW5nKQogICAgICAgIHNldHRpbmdzLmNvbnRlbnRCbG9ja2luZy5zZXRBbnRpVHJhY2tpbmcodHJhY2tpbmdDYXRlZ29yaWVzKCkpCiAgICB9CgogICAgcHJpdmF0ZSBmdW4gdHJhY2tpbmdDYXRlZ29yaWVzKCk6IEludCB7CiAgICAgICAgdmFsIGJhc2UgPSBDb250ZW50QmxvY2tpbmcuQW50aVRyYWNraW5nLlNPQ0lBTCBvciBDb250ZW50QmxvY2tpbmcuQW50aVRyYWNraW5nLkFOQUxZVElDCiAgICAgICAgdmFsIGFnZ3Jlc3NpdmUgPSBiYXNlIG9yCiAgICAgICAgICAgIENvbnRlbnRCbG9ja2luZy5BbnRpVHJhY2tpbmcuQUQgb3IKICAgICAgICAgICAgQ29udGVudEJsb2NraW5nLkFudGlUcmFja2luZy5DT05URU5UIG9yCiAgICAgICAgICAgIENvbnRlbnRCbG9ja2luZy5BbnRpVHJhY2tpbmcuQ1JZUFRPTUlOSU5HIG9yCiAgICAgICAgICAgIENvbnRlbnRCbG9ja2luZy5BbnRpVHJhY2tpbmcuU1RQCiAgICAgICAgdmFsIGNhdHMgPSB3aGVuIHsKICAgICAgICAgICAgIVByZWZzLnNoaWVsZHNPbiAtPiBDb250ZW50QmxvY2tpbmcuQW50aVRyYWNraW5nLk5PTkUKICAgICAgICAgICAgUHJlZnMuYmxvY2tBZHMgLT4gYWdncmVzc2l2ZQogICAgICAgICAgICBlbHNlIC0+IGJhc2UKICAgICAgICB9CiAgICAgICAgcmV0dXJuIGNhdHMgb3IKICAgICAgICAgICAgKGlmIChQcmVmcy5zaGllbGRzT24gJiYgUHJlZnMuYmxvY2tGaW5nZXJwcmludGluZykgQ29udGVudEJsb2NraW5nLkFudGlUcmFja2luZy5GSU5HRVJQUklOVElORyBlbHNlIDApCiAgICB9CgogICAgLyogLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tICovCiAgICAvKiAgTGl2ZSByZS1jb25maWd1cmF0aW9uIGZyb20gdGhlIFNldHRpbmdzIHNjcmVlbiAgICAgICAgICAgICAgICAgICAgICovCiAgICAvKiAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0gKi8KCiAgICBmdW4gYXBwbHlTaGllbGRzKCkgewogICAgICAgIHZhbCBzZXR0aW5ncyA9IHJ1bnRpbWU/LnNldHRpbmdzID86IHJldHVybgogICAgICAgIHNldHRpbmdzLmNvbnRlbnRCbG9ja2luZy5zZXRBbnRpVHJhY2tpbmcodHJhY2tpbmdDYXRlZ29yaWVzKCkpCiAgICAgICAgc2V0dGluZ3MuY29udGVudEJsb2NraW5nLnNldEVuaGFuY2VkVHJhY2tpbmdQcm90ZWN0aW9uTGV2ZWwoCiAgICAgICAgICAgIGlmIChQcmVmcy5zaGllbGRzT24pIENvbnRlbnRCbG9ja2luZy5FdHBMZXZlbC5TVFJJQ1QgZWxzZSBDb250ZW50QmxvY2tpbmcuRXRwTGV2ZWwuTk9ORQogICAgICAgICkKICAgICAgICBzZXR0aW5ncy5jb250ZW50QmxvY2tpbmcuc2V0U2FmZUJyb3dzaW5nKAogICAgICAgICAgICBpZiAoUHJlZnMuc2hpZWxkc09uKSBDb250ZW50QmxvY2tpbmcuU2FmZUJyb3dzaW5nLkRFRkFVTFQgZWxzZSBDb250ZW50QmxvY2tpbmcuU2FmZUJyb3dzaW5nLk5PTkUKICAgICAgICApCiAgICAgICAgc2V0dGluZ3MuY29udGVudEJsb2NraW5nLnNldENvb2tpZUJlaGF2aW9yKAogICAgICAgICAgICBpZiAoUHJlZnMuc2hpZWxkc09uKSBDb250ZW50QmxvY2tpbmcuQ29va2llQmVoYXZpb3IuQUNDRVBUX0ZJUlNUX1BBUlRZX0FORF9JU09MQVRFX09USEVSUwogICAgICAgICAgICBlbHNlIENvbnRlbnRCbG9ja2luZy5Db29raWVCZWhhdmlvci5BQ0NFUFRfQUxMCiAgICAgICAgKQogICAgICAgIGFwcGx5RmluZ2VycHJpbnRpbmcoc2V0dGluZ3MpCgogICAgICAgIC8vIFBlci1zZXNzaW9uIHRyYWNraW5nIHByb3RlY3Rpb24gZm9sbG93cyB0aGUgZ2xvYmFsIHNoaWVsZCBzd2l0Y2guCiAgICAgICAgVGFiTWFuYWdlci5zZXRUcmFja2luZ1Byb3RlY3Rpb24oUHJlZnMuc2hpZWxkc09uKQogICAgfQoKICAgIGZ1biBhcHBseVRleHRTaXplKCkgewogICAgICAgIHJ1bnRpbWU/LnNldHRpbmdzPy5hcHBseSB7CiAgICAgICAgICAgIGF1dG9tYXRpY0ZvbnRTaXplQWRqdXN0bWVudCA9IGZhbHNlCiAgICAgICAgICAgIGZvbnRTaXplRmFjdG9yID0gUHJlZnMudGV4dFNpemVQZXJjZW50IC8gMTAwZgogICAgICAgIH0KICAgIH0KCiAgICBmdW4gYXBwbHlUaGVtZSgpIHsKICAgICAgICBydW50aW1lPy5zZXR0aW5ncz8ucHJlZmVycmVkQ29sb3JTY2hlbWUgPQogICAgICAgICAgICBpZiAoUHJlZnMuYndUaGVtZSkgR2Vja29SdW50aW1lU2V0dGluZ3MuQ09MT1JfU0NIRU1FX0RBUksKICAgICAgICAgICAgZWxzZSBHZWNrb1J1bnRpbWVTZXR0aW5ncy5DT0xPUl9TQ0hFTUVfU1lTVEVNCiAgICB9CgogICAgZnVuIGFwcGx5SmF2YVNjcmlwdCgpIHsKICAgICAgICBydW50aW1lPy5zZXR0aW5ncz8uamF2YVNjcmlwdEVuYWJsZWQgPSBQcmVmcy5qYXZhU2NyaXB0RW5hYmxlZAogICAgfQoKICAgIGZ1biBhcHBseVVzZXJBZ2VudCgpIHsKICAgICAgICBUYWJNYW5hZ2VyLnNldFVzZXJBZ2VudE1vZGUoCiAgICAgICAgICAgIGlmIChQcmVmcy5kZXNrdG9wVXNlckFnZW50KSAxIGVsc2UgMCAvLyBVU0VSX0FHRU5UX01PREVfREVTS1RPUCA6IFVTRVJfQUdFTlRfTU9ERV9NT0JJTEUKICAgICAgICApCiAgICB9Cn0K
+package com.minimal.browser
+
+import android.app.Application
+import android.util.Log
+import org.mozilla.geckoview.ContentBlocking
+import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoRuntimeSettings
+
+/**
+ * Owns the single GeckoRuntime (the Firefox engine) for the whole process and
+ * keeps the privacy settings in sync with the Settings screen.
+ */
+class BrowserApp : Application() {
+
+    companion object {
+        private const val TAG = "MinimalBrowser"
+
+        @Volatile
+        var runtime: GeckoRuntime? = null
+            private set
+
+        /** Non-null when the engine failed to start; surfaced to the user in the UI. */
+        @Volatile
+        var startupFailure: String? = null
+            private set
+
+        fun requireRuntime(): GeckoRuntime =
+            runtime ?: throw IllegalStateException(
+                "GeckoRuntime is not available${startupFailure?.let { " ($it)" } ?: ""}"
+            )
+
+        /** True when a page can actually be rendered. Guards the web screen. */
+        val engineReady: Boolean get() = runtime != null
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Install first: if engine startup itself fails we want the trace, not a
+        // silent black screen.
+        CrashReporter.install(this)
+        Prefs.init(this)
+        try {
+            createRuntime()
+        } catch (e: Throwable) {
+            // A GeckoRuntime that cannot start must not take the process with it:
+            // the UI (home, tabs, settings) is still useful, and the message tells
+            // the user why pages will not load.
+            runtime = null
+            Log.e(TAG, "GeckoRuntime.create failed", e)
+            startupFailure = "${e.javaClass.simpleName}: ${e.message}"
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    private fun createRuntime() {
+        if (runtime != null) return
+
+        val cbSettings = ContentBlocking.Settings.Builder()
+            // Ads, analytics, social + content trackers, cryptomining.
+            .antiTracking(
+                ContentBlocking.AntiTracking.AD or
+                    ContentBlocking.AntiTracking.ANALYTIC or
+                    ContentBlocking.AntiTracking.SOCIAL or
+                    ContentBlocking.AntiTracking.CONTENT or
+                    ContentBlocking.AntiTracking.CRYPTOMINING or
+                    ContentBlocking.AntiTracking.STP or
+                    ContentBlocking.AntiTracking.FINGERPRINTING
+            )
+            .enhancedTrackingProtectionLevel(ContentBlocking.EtpLevel.STRICT)
+            .cookieBehavior(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
+            .cookiePurging(true)
+            .safeBrowsing(ContentBlocking.SafeBrowsing.DEFAULT)
+            .build()
+
+        val builder = GeckoRuntimeSettings.Builder()
+            // Firefox prefs: https-first everywhere, and no telemetry home phone.
+            .arguments(
+                arrayOf(
+                    "-pref", "dom.security.https_only_mode=true",
+                    "-pref", "dom.security.https_only_mode_pbm=true"
+                )
+            )
+            .javaScriptEnabled(Prefs.javaScriptEnabled)
+            .webFontsEnabled(true)
+            .aboutConfigEnabled(false)
+            .remoteDebuggingEnabled(BuildConfig.DEBUG)
+            .consoleOutput(false)
+            .automaticFontSizeAdjustment(false)
+            .fontSizeFactor(Prefs.textSizePercent / 100f)
+            .inputAutoZoomEnabled(true)
+            .doubleTapZoomingEnabled(true)
+            .contentBlocking(cbSettings)
+            .preferredColorScheme(
+                if (Prefs.bwTheme) GeckoRuntimeSettings.COLOR_SCHEME_DARK
+                else GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM
+            )
+
+        val settings = builder.build()
+        runtime = GeckoRuntime.create(this, settings)
+
+        // Settings that only exist as setters on the built settings object.
+        applyHttpsOnly(settings)
+        applyFingerprinting(settings)
+
+        // Local, bundled EasyList/EasyPrivacy-style block list (request-level).
+        AdBlocker.init(this)
+        Log.i(TAG, "GeckoRuntime ready")
+    }
+
+    /** https-only mode; guarded so it degrades gracefully on any engine build. */
+    private fun applyHttpsOnly(settings: GeckoRuntimeSettings) {
+        val mode = if (Prefs.httpsOnly) {
+            GeckoRuntimeSettings.HTTPS_ONLY
+        } else {
+            0 // HTTPS_ONLY_DISABLED
+        }
+        try {
+            val m = GeckoRuntimeSettings::class.java.getMethod("setHttpsOnlyMode", Int::class.javaPrimitiveType)
+            m.invoke(settings, mode)
+        } catch (e: Throwable) {
+            Log.w(TAG, "https-only pref unavailable: ${e.message}")
+        }
+    }
+
+    /** Firefox's fingerprinting resistance (the "Block fingerprinting" row). */
+    private fun applyFingerprinting(settings: GeckoRuntimeSettings) {
+        settings.setFingerprintingProtection(Prefs.blockFingerprinting)
+        settings.contentBlocking.setAntiTracking(trackingCategories())
+    }
+
+    private fun trackingCategories(): Int {
+        val base = ContentBlocking.AntiTracking.SOCIAL or ContentBlocking.AntiTracking.ANALYTIC
+        val aggressive = base or
+            ContentBlocking.AntiTracking.AD or
+            ContentBlocking.AntiTracking.CONTENT or
+            ContentBlocking.AntiTracking.CRYPTOMINING or
+            ContentBlocking.AntiTracking.STP
+        val cats = when {
+            !Prefs.shieldsOn -> ContentBlocking.AntiTracking.NONE
+            Prefs.blockAds -> aggressive
+            else -> base
+        }
+        return cats or
+            (if (Prefs.shieldsOn && Prefs.blockFingerprinting) ContentBlocking.AntiTracking.FINGERPRINTING else 0)
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Live re-configuration from the Settings screen                     */
+    /* ------------------------------------------------------------------ */
+
+    fun applyShields() {
+        val settings = runtime?.settings ?: return
+        settings.contentBlocking.setAntiTracking(trackingCategories())
+        settings.contentBlocking.setEnhancedTrackingProtectionLevel(
+            if (Prefs.shieldsOn) ContentBlocking.EtpLevel.STRICT else ContentBlocking.EtpLevel.NONE
+        )
+        settings.contentBlocking.setSafeBrowsing(
+            if (Prefs.shieldsOn) ContentBlocking.SafeBrowsing.DEFAULT else ContentBlocking.SafeBrowsing.NONE
+        )
+        settings.contentBlocking.setCookieBehavior(
+            if (Prefs.shieldsOn) ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS
+            else ContentBlocking.CookieBehavior.ACCEPT_ALL
+        )
+        applyFingerprinting(settings)
+
+        // Per-session tracking protection follows the global shield switch.
+        TabManager.setTrackingProtection(Prefs.shieldsOn)
+    }
+
+    fun applyTextSize() {
+        runtime?.settings?.apply {
+            automaticFontSizeAdjustment = false
+            fontSizeFactor = Prefs.textSizePercent / 100f
+        }
+    }
+
+    fun applyTheme() {
+        runtime?.settings?.preferredColorScheme =
+            if (Prefs.bwTheme) GeckoRuntimeSettings.COLOR_SCHEME_DARK
+            else GeckoRuntimeSettings.COLOR_SCHEME_SYSTEM
+    }
+
+    fun applyJavaScript() {
+        runtime?.settings?.javaScriptEnabled = Prefs.javaScriptEnabled
+    }
+
+    fun applyUserAgent() {
+        TabManager.setUserAgentMode(
+            if (Prefs.desktopUserAgent) 1 else 0 // USER_AGENT_MODE_DESKTOP : USER_AGENT_MODE_MOBILE
+        )
+    }
+}
