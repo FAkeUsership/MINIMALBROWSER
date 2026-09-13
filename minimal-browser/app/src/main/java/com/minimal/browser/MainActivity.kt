@@ -38,6 +38,7 @@ import com.minimal.browser.ui.dp
 import com.minimal.browser.ui.icon
 import com.minimal.browser.ui.roundRect
 import org.mozilla.geckoview.GeckoView
+import java.util.concurrent.Executors
 
 /**
  * Minimal — a landscape, monochrome, privacy-first browser shell around
@@ -85,6 +86,18 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     private var lastExitAt = 0L
     private var firstHoldHintDone = false
+
+    // Chrome callbacks may arrive during navigation. Keep bookmark queries off
+    // the render/UI thread and reuse one worker rather than spawning a thread
+    // per menu action or per location update.
+    private val chromeStore = Executors.newSingleThreadExecutor { work ->
+        Thread(work, "minimal-browser-chrome-store").apply {
+            priority = Thread.NORM_PRIORITY - 1
+        }
+    }
+    private var drawerBookmarkUrl: String? = null
+    private var drawerBookmarkValue = false
+    private var drawerBookmarkRequest = 0L
 
     private enum class Screen { HOME, WEB, TABS, SETTINGS, LIST }
 
@@ -301,7 +314,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
         /* ---- lists ---- */
         listScreen.onOpenUrl = { openUrl(it) }
-        listScreen.onDeleteBookmark = { syncDrawer() }
+        listScreen.onDeleteBookmark = {
+            invalidateDrawerBookmark()
+            syncDrawer()
+        }
     }
 
     /* ================================================================== */
@@ -437,17 +453,18 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     /**
      * Android Back or a page double tap restores browser chrome and ordinary
-     * system bars. If page content also entered native video/full-screen while
-     * app page-only mode was active, leave that state in the same Back action;
-     * otherwise the page's full-screen state could consume the first exit.
+     * system bars. Also tell Gecko to leave content full-screen even when its
+     * asynchronous callback has not arrived yet; otherwise that late state can
+     * consume the first page-only exit action.
      */
     private fun exitPageOnly() {
         if (!fullScreen) return
         fullScreen = false
-        if (videoFullScreen) {
-            videoFullScreen = false
-            TabManager.exitPageFullScreen()
-        }
+        videoFullScreen = false
+        // This is a safe no-op when page content is not full-screen. Issuing it
+        // unconditionally closes the callback race between a video entering
+        // full-screen and the user's single Android Back gesture.
+        TabManager.exitPageFullScreen()
         webScreen.cancelEditing()
         applyFullScreen()
     }
@@ -459,18 +476,23 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /* ================================================================== */
 
     private fun handleBack() {
+        if (fullScreen) {
+            // Page-only mode is deliberately first: an invisible/stale drawer
+            // state must never consume the one Back action promised to restore
+            // normal browser controls and system bars.
+            exitPageOnly()
+            return
+        }
         if (drawer.isOpen()) {
             drawer.close()
             return
         }
-        if (fullScreen) {
-            // App page-only mode has priority over a page's own video state so a
-            // single physical/gesture Back always restores browser controls.
-            exitPageOnly()
-            return
-        }
         if (videoFullScreen) {
+            // Optimistically restore app chrome rather than waiting for Gecko's
+            // asynchronous full-screen-exit callback.
+            videoFullScreen = false
             TabManager.exitPageFullScreen()
+            applyFullScreen()
             return
         }
         if (current == Screen.LIST) {
@@ -711,10 +733,6 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         if (TabManager.active === tab && current == Screen.WEB) webScreen.syncTo(tab)
     }
 
-    override fun onBlockedTotal(kind: String, host: String) {
-        // Counted in the database; the Home footer reads it back.
-    }
-
     override fun onEnterVideoFullScreen(fullScreen: Boolean) {
         // A hidden/inactive tab must not hide the ordinary Home/Tabs UI because
         // of a delayed content callback after its surface was released.
@@ -800,9 +818,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         val url = tab.url
         val title = tab.title
         if (url.isEmpty()) return
-        Thread {
+        val storeContext = applicationContext
+        chromeStore.execute {
             val message = runCatching {
-                val db = DataStore.get(this)
+                val db = DataStore.get(storeContext)
                 if (db.isBookmarked(url)) {
                     db.removeBookmark(url)
                     "Bookmark removed"
@@ -812,10 +831,13 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                 }
             }.getOrElse { "Could not update bookmark" }
             runOnUiThread {
-                toast.say(message)
-                syncDrawer()
+                if (!isDestroyed) {
+                    invalidateDrawerBookmark(url)
+                    toast.say(message)
+                    syncDrawer()
+                }
             }
-        }.start()
+        }
     }
 
     override fun onShare() {
@@ -875,23 +897,26 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Clear") { _, _ ->
-                Thread {
+                val storeContext = applicationContext
+                chromeStore.execute {
                     val databaseCleared = runCatching {
-                        val db = DataStore.get(this)
+                        val db = DataStore.get(storeContext)
                         if (checked[0]) db.clearHistory()
                         if (checked[3]) db.clearBlocked()
                     }.isSuccess
                     runOnUiThread {
-                        // Keep the Gecko storage operation on the same UI boundary
-                        // as session lifecycle changes.
-                        TabManager.clearEngineData(
-                            clearCookies = checked[1],
-                            clearCache = checked[2],
-                            clearHistory = checked[0]
-                        )
-                        toast.say(if (databaseCleared) "Browsing data cleared" else "Some browsing data could not be cleared")
+                        if (!isDestroyed) {
+                            // Keep the Gecko storage operation on the same UI boundary
+                            // as session lifecycle changes.
+                            TabManager.clearEngineData(
+                                clearCookies = checked[1],
+                                clearCache = checked[2],
+                                clearHistory = checked[0]
+                            )
+                            toast.say(if (databaseCleared) "Browsing data cleared" else "Some browsing data could not be cleared")
+                        }
                     }
-                }.start()
+                }
             }
             .show()
     }
@@ -927,16 +952,51 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         shieldDot.background = roundRect(99, if (on) Color.WHITE else Ink.MUTED)
     }
 
+    /**
+     * The drawer is chrome, not page content. Never make navigation wait for a
+     * synchronous SQLite bookmark lookup just to update its bookmark row.
+     */
     private fun syncDrawer() {
-        val tab = TabManager.active
-        val bookmarked = tab?.url?.let { url ->
-            try {
-                DataStore.get(this).isBookmarked(url)
-            } catch (e: Exception) {
-                false
+        val url = TabManager.active?.url?.takeIf { it.isNotBlank() }
+        val tabCount = TabManager.tabs.size
+        if (url == null) {
+            invalidateDrawerBookmark()
+            drawer.syncState(tabCount, false)
+            return
+        }
+        if (drawerBookmarkUrl == url) {
+            drawer.syncState(tabCount, drawerBookmarkValue)
+            return
+        }
+
+        drawerBookmarkUrl = url
+        drawerBookmarkValue = false
+        val request = ++drawerBookmarkRequest
+        val storeContext = applicationContext
+        drawer.syncState(tabCount, false)
+        try {
+            chromeStore.execute {
+                val bookmarked = runCatching {
+                    DataStore.get(storeContext).isBookmarked(url)
+                }.getOrDefault(false)
+                runOnUiThread {
+                    if (!isDestroyed && request == drawerBookmarkRequest && drawerBookmarkUrl == url) {
+                        drawerBookmarkValue = bookmarked
+                        drawer.syncState(TabManager.tabs.size, bookmarked)
+                    }
+                }
             }
-        } ?: false
-        drawer.syncState(TabManager.tabs.size, bookmarked)
+        } catch (error: Throwable) {
+            Log.w("MinimalBrowser", "could not query drawer bookmark state", error)
+        }
+    }
+
+    private fun invalidateDrawerBookmark(url: String? = null) {
+        if (url == null || drawerBookmarkUrl == url) {
+            drawerBookmarkUrl = null
+            drawerBookmarkValue = false
+            drawerBookmarkRequest++
+        }
     }
 
     /* ================================================================== */
@@ -965,6 +1025,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         TabManager.detach()
         webScreen.detachGeckoView()
         TabManager.host = null
+        chromeStore.shutdownNow()
         super.onDestroy()
     }
 

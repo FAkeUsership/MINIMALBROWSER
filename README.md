@@ -7,7 +7,7 @@
 - A process-wide Gecko runtime created only when Web/navigation is first needed.
 - One deferred, initialized-default high-performance `SurfaceView`-backed visible `GeckoView`; Home, Tabs, Settings, and hidden screens never own a compositor surface.
 - Gecko delegates installed before each `GeckoSession` opens, URL-only ordinary-tab restoration, and replacement/reload of a crashed or killed renderer session.
-- Working Home quick links including Mail and YouTube, address-bar search/navigation, external URI routing, tab switching, history, downloads, printing, and private tabs.
+- Working Home quick links including Mail and YouTube, address-bar search/navigation, external URI routing, tab switching, history, downloads, printing, and private tabs. OAuth/`target=_blank` child windows are surfaced as foreground tabs, and JavaScript/FedCM/WebAuthn/redirect prompts are explicitly presented rather than silently dismissed.
 - A fixed **5-second** hold on the Web rail button for clean page-only mode. It hides app chrome and Android system bars; one Android Back gesture/button or a page double-tap restores them.
 - Normal Android system bars on all ordinary screens; predictive Back is enabled on current Android versions.
 - An ARM64-only release APK that intentionally remains large because it includes `libxul.so` and Gecko companion libraries.
@@ -16,11 +16,11 @@
 
 Releases are built **only on GitHub Actions** through [`.github/workflows/build.yml`](.github/workflows/build.yml). The workflow:
 
-1. assembles `minimal-browser` on a GitHub runner;
-2. validates the generated package ID and version;
+1. assembles the signed, non-debuggable `release` variant on a GitHub runner;
+2. validates the generated APK signature, package ID, version, and lack of Android's debug-process marker;
 3. validates ARM64-only native code, `lib/arm64-v8a/libxul.so`, and install-time native-library extraction in the built APK;
 4. confirms the bundled-engine artifact is substantial rather than a tiny System WebView shell;
-5. publishes `MinimalBrowser-arm64-v8a-debug.apk` and `SHA256SUMS.txt` to the matching GitHub Release.
+5. publishes `MinimalBrowser-arm64-v8a-release.apk` and `SHA256SUMS.txt` to the matching GitHub Release.
 
 See [BUILD.md](BUILD.md) for the tag-based release procedure and [minimal-browser/README.md](minimal-browser/README.md) for project details.
 
@@ -30,7 +30,8 @@ A successful GitHub workflow verifies source compilation, packaging, and release
 
 1. Home → Mail and YouTube quick links;
 2. Web → address-bar URL and search navigation;
-3. tab creation, switching, closing, and Android Back;
-4. hold Web for exactly five seconds, then verify one Back and page double-tap restore;
-5. scrolling, navigation, tab switching, and device heat/stutter behavior on ordinary and tracker-heavy pages;
-6. download and print flows.
+3. a Google/Arena sign-in or consent flow, including any prompt and new foreground tab;
+4. tab creation, switching, closing, and Android Back;
+5. hold Web for exactly five seconds, then verify one Back and page double-tap restore;
+6. scrolling, navigation, tab switching, and device heat/stutter behavior on ordinary and tracker-heavy pages;
+7. download and print flows.

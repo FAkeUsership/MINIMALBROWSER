@@ -55,16 +55,15 @@ class BrowserApp : Application() {
             if (runtime != null) return
 
             val contentBlocking = ContentBlocking.Settings.Builder()
-                .antiTracking(
-                    ContentBlocking.AntiTracking.AD or
-                        ContentBlocking.AntiTracking.ANALYTIC or
-                        ContentBlocking.AntiTracking.SOCIAL or
-                        ContentBlocking.AntiTracking.CONTENT or
-                        ContentBlocking.AntiTracking.CRYPTOMINING or
-                        ContentBlocking.AntiTracking.STP or
-                        ContentBlocking.AntiTracking.FINGERPRINTING
+                // Strict ETP's content list can block login fields, forms, video,
+                // and embedded consent flows. Keep the app's local ad/tracker list
+                // and standard Gecko protections, but use the compatibility-focused
+                // default ETP level for an ordinary browser session.
+                .antiTracking(trackingCategories())
+                .enhancedTrackingProtectionLevel(
+                    if (Prefs.shieldsOn) ContentBlocking.EtpLevel.DEFAULT
+                    else ContentBlocking.EtpLevel.NONE
                 )
-                .enhancedTrackingProtectionLevel(ContentBlocking.EtpLevel.STRICT)
                 .cookieBehavior(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
                 .cookiePurging(true)
                 .safeBrowsing(ContentBlocking.SafeBrowsing.DEFAULT)
@@ -118,9 +117,7 @@ class BrowserApp : Application() {
             val base = ContentBlocking.AntiTracking.SOCIAL or ContentBlocking.AntiTracking.ANALYTIC
             val aggressive = base or
                 ContentBlocking.AntiTracking.AD or
-                ContentBlocking.AntiTracking.CONTENT or
-                ContentBlocking.AntiTracking.CRYPTOMINING or
-                ContentBlocking.AntiTracking.STP
+                ContentBlocking.AntiTracking.CRYPTOMINING
             val categories = when {
                 !Prefs.shieldsOn -> ContentBlocking.AntiTracking.NONE
                 Prefs.blockAds -> aggressive
@@ -148,7 +145,7 @@ class BrowserApp : Application() {
         val settings = runtime?.settings ?: return
         settings.contentBlocking.setAntiTracking(trackingCategories())
         settings.contentBlocking.setEnhancedTrackingProtectionLevel(
-            if (Prefs.shieldsOn) ContentBlocking.EtpLevel.STRICT else ContentBlocking.EtpLevel.NONE
+            if (Prefs.shieldsOn) ContentBlocking.EtpLevel.DEFAULT else ContentBlocking.EtpLevel.NONE
         )
         settings.contentBlocking.setSafeBrowsing(
             if (Prefs.shieldsOn) ContentBlocking.SafeBrowsing.DEFAULT else ContentBlocking.SafeBrowsing.NONE

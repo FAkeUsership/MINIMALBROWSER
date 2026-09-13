@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2.4 — Signed non-debuggable release variant and chrome I/O pass
+
+- Publishes the first `assembleRelease` ARM64 APK: the installed process is non-debuggable and JNI-debugging is off. GitHub creates a standard Android debug certificate only in its disposable runner so the release variant remains sideloadable; its new per-run certificate may require uninstalling an older differently signed build. A persistent private release certificate is still needed for seamless update signing.
+- GitHub Actions now verifies the generated APK signature and asserts that `application-debuggable` is absent, in addition to package/version, ARM64-only native code, `libxul.so`, native extraction, archive integrity, size, and SHA-256.
+- Keeps GeckoView 153’s initialized default `SurfaceView` rather than resetting its backend, preserving the v1.2.3 black-screen correction and direct-surface rendering path.
+- Removes synchronous SQLite bookmark checks from browser/navigation chrome and replaces ad-hoc chrome threads with one low-priority reusable worker. The drawer uses a request-checked cache so stale page callbacks cannot overwrite its bookmark state.
+- Makes page-only Back deterministic: page-only now takes precedence over any stale drawer state, and an exit asks Gecko to leave content full-screen even if its asynchronous callback has not reached the shell yet. This keeps one Android Back focused on restoring browser controls and ordinary system bars.
+- Repairs opaque web sign-in/consent handoffs. A `target=_blank`/`window.open` child session is now foregrounded only after Gecko opens it; the old code created the child but left it in the background. A small PromptDelegate now presents JavaScript confirmation/input, form-choice, safe redirect/popup, WebAuthn-related-origin, and FedCM provider/account/consent prompts instead of GeckoView’s default silent dismissal.
+- Uses GeckoView’s default ETP level rather than the more breakage-prone strict content list; local ad/tracker filtering, safe browsing, cookie isolation, cryptomining/fingerprinting protection, and the shields switch remain. Cross-site sign-in storage is now explicitly approved or blocked by the user, including a chance to retry a denial inherited from earlier builds.
+- Avoids parsing every blocked resource URL merely for an unused per-resource host field and removes unused blocked-total callbacks; shield persistence now uses the current page host once per short batch. Existing screenshot removal, rule indexing, progress coalescing, remote-debug disablement, and inactive-tab suspension remain in place.
+
 ## v1.2.3 — Surface lifecycle black-screen correction
 
 - Corrects the v1.2.2 black-screen regression. GeckoView 153 already creates and listens to its default high-performance `SurfaceView`; calling `setViewBackend(BACKEND_SURFACE_VIEW)` again replaced that initialized surface without re-registering its holder callback. v1.2.3 retains the initialized default SurfaceView instead, so Gecko receives the compositor surface callback.

@@ -1,11 +1,15 @@
 package com.minimal.browser
 
+import android.app.AlertDialog
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.widget.EditText
+import androidx.annotation.OptIn
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.ContentBlocking
+import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -16,6 +20,7 @@ import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 import java.util.UUID
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Multi-tab controller for the bundled GeckoView engine.
@@ -42,8 +47,7 @@ object TabManager {
     private data class BlockedSignal(
         val tab: Tab,
         val generation: Long,
-        val kind: String,
-        val host: String
+        val kind: String
     )
     private data class BlockedDelta(var ads: Int = 0, var trackers: Int = 0)
     private val blockedSignalLock = Any()
@@ -69,7 +73,6 @@ object TabManager {
         fun onPageFinished(tab: Tab, successful: Boolean)
         fun onSecurityChanged(tab: Tab)
         fun onBlockedOnPage(tab: Tab)
-        fun onBlockedTotal(kind: String, host: String)
         fun onEnterVideoFullScreen(fullScreen: Boolean)
         fun onDownloadStarted(fileName: String)
         fun onTabWantsToClose(tab: Tab)
@@ -461,6 +464,27 @@ object TabManager {
     /*  session setup and delegates                                       */
     /* ------------------------------------------------------------------ */
 
+    /**
+     * A target=_blank/window.open session is opened by Gecko only after
+     * NavigationDelegate.onNewSession returns. Posting the activation keeps the
+     * browser from attaching an unopened session, while bringing a user-facing
+     * login/consent window to the foreground as soon as Gecko has opened it.
+     */
+    private fun foregroundOpenedChild(tab: Tab, attempts: Int = 0) {
+        main.post {
+            if (!tabs.contains(tab)) return@post
+            if (tab.session.isOpen()) {
+                switchTo(tab)
+            } else if (attempts < 3) {
+                // Gecko opens the returned session on its current UI callback;
+                // retry a few main-loop turns only for that handoff.
+                foregroundOpenedChild(tab, attempts + 1)
+            } else {
+                Log.w(TAG, "new child session did not open in time")
+            }
+        }
+    }
+
     private fun bind(tab: Tab) {
         val session = tab.session
         session.navigationDelegate = NavigationDelegateImpl(tab)
@@ -469,6 +493,7 @@ object TabManager {
         session.contentDelegate = ContentDelegateImpl(tab)
         session.historyDelegate = HistoryDelegateImpl(tab)
         session.permissionDelegate = PermissionDelegateImpl()
+        session.setPromptDelegate(BrowserPromptDelegate())
         session.setContentBlockingDelegate(ContentBlockingDelegateImpl(tab))
     }
 
@@ -531,11 +556,11 @@ object TabManager {
             if (!isCurrent(tab, session)) return GeckoResult.deny()
             return when (AdBlocker.check(request.uri)) {
                 AdBlocker.Verdict.BLOCK_AD -> {
-                    reportBlocked(tab, "ad", request.uri)
+                    reportBlocked(tab, "ad")
                     GeckoResult.deny()
                 }
                 AdBlocker.Verdict.BLOCK_TRACKER -> {
-                    reportBlocked(tab, "tracker", request.uri)
+                    reportBlocked(tab, "tracker")
                     GeckoResult.deny()
                 }
                 AdBlocker.Verdict.ALLOW -> GeckoResult.allow()
@@ -552,6 +577,12 @@ object TabManager {
                 child.isSecure = uri.startsWith("https://", ignoreCase = true)
                 tabs += child
                 host?.onTabsChanged()
+                // OAuth and consent pages frequently use target=_blank or
+                // window.open. The old implementation retained this new
+                // session in the background, leaving the tapped flow looking
+                // like it had done nothing. Gecko opens it after this callback;
+                // activate it on the following UI turn, never before.
+                foregroundOpenedChild(child)
                 GeckoResult.fromValue(child.session)
             } catch (error: Throwable) {
                 Log.e(TAG, "could not create requested child tab", error)
@@ -678,7 +709,7 @@ object TabManager {
                     ContentBlocking.AntiTracking.CONTENT or
                     ContentBlocking.AntiTracking.CRYPTOMINING
                 )) != 0
-            reportBlocked(tab, if (isAd) "ad" else "tracker", event.uri)
+            reportBlocked(tab, if (isAd) "ad" else "tracker")
         }
     }
 
@@ -700,7 +731,304 @@ object TabManager {
         }
     }
 
-    /** No permission prompt can crash browsing; private browser defaults deny unsafe requests. */
+    /**
+     * GeckoView's default when no PromptDelegate is installed is to dismiss every
+     * content prompt. That makes JavaScript confirmations and modern FedCM
+     * sign-in/consent handoffs look like a tapped button did nothing. Keep the
+     * implementation deliberately small, but surface the safe browser prompts
+     * that are needed for ordinary navigation and sign-in.
+     */
+    private class BrowserPromptDelegate : GeckoSession.PromptDelegate {
+        private fun activeActivity(): android.app.Activity? =
+            host?.activeContext() as? android.app.Activity
+
+        private fun title(value: String?, fallback: String): String =
+            value?.takeIf { it.isNotBlank() } ?: fallback
+
+        private fun targetLabel(uri: String?): String =
+            UrlBar.hostOf(uri).ifBlank { uri?.takeIf { it.isNotBlank() } ?: "another page" }
+
+        private fun dismissed(
+            prompt: GeckoSession.PromptDelegate.BasePrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = try {
+            GeckoResult.fromValue(prompt.dismiss())
+        } catch (error: Throwable) {
+            Log.w(TAG, "could not dismiss content prompt", error)
+            GeckoResult.fromValue<GeckoSession.PromptDelegate.PromptResponse>(null)
+        }
+
+        private fun complete(
+            result: GeckoResult<GeckoSession.PromptDelegate.PromptResponse>,
+            prompt: GeckoSession.PromptDelegate.BasePrompt,
+            response: () -> GeckoSession.PromptDelegate.PromptResponse
+        ) {
+            if (prompt.isComplete()) return
+            try {
+                result.complete(response())
+            } catch (error: Throwable) {
+                Log.w(TAG, "could not complete content prompt", error)
+                runCatching { result.complete(null) }
+            }
+        }
+
+        private fun show(
+            prompt: GeckoSession.PromptDelegate.BasePrompt,
+            configure: (
+                AlertDialog.Builder,
+                GeckoResult<GeckoSession.PromptDelegate.PromptResponse>
+            ) -> Unit
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+            val activity = activeActivity()
+            if (activity == null || activity.isFinishing || activity.isDestroyed) {
+                return dismissed(prompt)
+            }
+            val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+            try {
+                val builder = AlertDialog.Builder(activity, R.style.Theme_Minimal_Dialog)
+                configure(builder, result)
+                builder.setOnCancelListener {
+                    complete(result, prompt) { prompt.dismiss() }
+                }
+                builder.show()
+            } catch (error: Throwable) {
+                Log.w(TAG, "could not show content prompt", error)
+                complete(result, prompt) { prompt.dismiss() }
+            }
+            return result
+        }
+
+        override fun onAlertPrompt(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.AlertPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = show(prompt) { builder, result ->
+            builder.setTitle(title(prompt.title, "Message"))
+                .setMessage(prompt.message.orEmpty())
+                .setPositiveButton("OK") { _, _ ->
+                    complete(result, prompt) { prompt.dismiss() }
+                }
+        }
+
+        override fun onButtonPrompt(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.ButtonPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = show(prompt) { builder, result ->
+            builder.setTitle(title(prompt.title, "Confirm"))
+                .setMessage(prompt.message.orEmpty())
+                .setNegativeButton("Cancel") { _, _ ->
+                    complete(result, prompt) {
+                        prompt.confirm(GeckoSession.PromptDelegate.ButtonPrompt.Type.NEGATIVE)
+                    }
+                }
+                .setPositiveButton("OK") { _, _ ->
+                    complete(result, prompt) {
+                        prompt.confirm(GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE)
+                    }
+                }
+        }
+
+        override fun onTextPrompt(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.TextPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+            val activity = activeActivity() ?: return dismissed(prompt)
+            val input = EditText(activity).apply {
+                setText(prompt.defaultValue.orEmpty())
+                setSelectAllOnFocus(false)
+            }
+            return show(prompt) { builder, result ->
+                builder.setTitle(title(prompt.title, "Input"))
+                    .setMessage(prompt.message.orEmpty())
+                    .setView(input)
+                    .setNegativeButton("Cancel") { _, _ ->
+                        complete(result, prompt) { prompt.dismiss() }
+                    }
+                    .setPositiveButton("OK") { _, _ ->
+                        complete(result, prompt) { prompt.confirm(input.text.toString()) }
+                    }
+            }
+        }
+
+        override fun onBeforeUnloadPrompt(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = show(prompt) { builder, result ->
+            builder.setTitle("Leave this page?")
+                .setMessage("Changes on this page may not be saved.")
+                .setNegativeButton("Stay") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.DENY) }
+                }
+                .setPositiveButton("Leave") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.ALLOW) }
+                }
+        }
+
+        override fun onRepostConfirmPrompt(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.RepostConfirmPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = show(prompt) { builder, result ->
+            builder.setTitle("Resend form data?")
+                .setMessage("Refreshing this page may submit the form again.")
+                .setNegativeButton("Cancel") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.DENY) }
+                }
+                .setPositiveButton("Resend") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.ALLOW) }
+                }
+        }
+
+        override fun onWebAuthnRelatedOriginPrompt(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.WebAuthnRelatedOriginPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = show(prompt) { builder, result ->
+            builder.setTitle("Allow passkey sign-in?")
+                .setMessage("${targetLabel(prompt.origin)} wants to use passkeys for ${prompt.rpId.orEmpty()}.")
+                .setNegativeButton("Cancel") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.DENY) }
+                }
+                .setPositiveButton("Allow") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.ALLOW) }
+                }
+        }
+
+        override fun onPopupPrompt(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.PopupPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = show(prompt) { builder, result ->
+            builder.setTitle("Allow pop-up?")
+                .setMessage("This page wants to open ${targetLabel(prompt.targetUri)}.")
+                .setNegativeButton("Block") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.DENY) }
+                }
+                .setPositiveButton("Allow") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.ALLOW) }
+                }
+        }
+
+        override fun onRedirectPrompt(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.RedirectPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = show(prompt) { builder, result ->
+            builder.setTitle("Allow redirect?")
+                .setMessage("This page wants to continue to ${targetLabel(prompt.targetUri)}.")
+                .setNegativeButton("Block") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.DENY) }
+                }
+                .setPositiveButton("Continue") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(AllowOrDeny.ALLOW) }
+                }
+        }
+
+        override fun onChoicePrompt(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.ChoicePrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+            val allChoices = ArrayList<GeckoSession.PromptDelegate.ChoicePrompt.Choice>()
+            for (choice in prompt.choices) {
+                val children = choice.items
+                if (children == null) {
+                    allChoices += choice
+                } else {
+                    children.forEach { allChoices += it }
+                }
+            }
+            val choices = allChoices.filter { !it.disabled && !it.separator }
+            if (choices.isEmpty()) return dismissed(prompt)
+            val labels: Array<CharSequence> = choices.map { it.label as CharSequence }.toTypedArray()
+            return if (prompt.type == GeckoSession.PromptDelegate.ChoicePrompt.Type.MULTIPLE) {
+                val selected = BooleanArray(choices.size) { choices[it].selected }
+                show(prompt) { builder, result ->
+                    builder.setTitle(title(prompt.title, "Choose options"))
+                        .setMessage(prompt.message)
+                        .setMultiChoiceItems(labels, selected) { _, which, checked ->
+                            selected[which] = checked
+                        }
+                        .setNegativeButton("Cancel") { _, _ ->
+                            complete(result, prompt) { prompt.dismiss() }
+                        }
+                        .setPositiveButton("Done") { _, _ ->
+                            val selectedChoices = choices.filterIndexed { index, _ -> selected[index] }.toTypedArray()
+                            complete(result, prompt) { prompt.confirm(selectedChoices) }
+                        }
+                }
+            } else {
+                val initial = choices.indexOfFirst { it.selected }.coerceAtLeast(0)
+                show(prompt) { builder, result ->
+                    builder.setTitle(title(prompt.title, "Choose an option"))
+                        .setMessage(prompt.message)
+                        .setSingleChoiceItems(labels, initial) { dialog, which ->
+                            complete(result, prompt) { prompt.confirm(choices[which]) }
+                            dialog.dismiss()
+                        }
+                        .setNegativeButton("Cancel") { _, _ ->
+                            complete(result, prompt) { prompt.dismiss() }
+                        }
+                }
+            }
+        }
+
+        override fun onSelectIdentityCredentialProvider(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.IdentityCredential.ProviderSelectorPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+            if (prompt.providers.isEmpty()) return dismissed(prompt)
+            val labels: Array<CharSequence> = prompt.providers.map {
+                "${it.name} (${it.domain})" as CharSequence
+            }.toTypedArray()
+            return show(prompt) { builder, result ->
+                builder.setTitle("Choose sign-in provider")
+                    .setItems(labels) { dialog, which ->
+                        complete(result, prompt) { prompt.confirm(which) }
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton("Cancel") { _, _ ->
+                        complete(result, prompt) { prompt.dismiss() }
+                    }
+            }
+        }
+
+        override fun onSelectIdentityCredentialAccount(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.IdentityCredential.AccountSelectorPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+            if (prompt.accounts.isEmpty()) return dismissed(prompt)
+            val labels: Array<CharSequence> = prompt.accounts.map {
+                if (it.name.isBlank()) it.email else "${it.name} (${it.email})"
+            }.map { it as CharSequence }.toTypedArray()
+            return show(prompt) { builder, result ->
+                builder.setTitle("Choose ${prompt.provider.name} account")
+                    .setItems(labels) { dialog, which ->
+                        complete(result, prompt) { prompt.confirm(which) }
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton("Cancel") { _, _ ->
+                        complete(result, prompt) { prompt.dismiss() }
+                    }
+            }
+        }
+
+        override fun onShowPrivacyPolicyIdentityCredential(
+            session: GeckoSession,
+            prompt: GeckoSession.PromptDelegate.IdentityCredential.PrivacyPolicyPrompt
+        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = show(prompt) { builder, result ->
+            builder.setTitle("Continue with ${prompt.providerDomain}?")
+                .setMessage("${prompt.host} wants to use this provider to sign you in.")
+                .setNegativeButton("Cancel") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(false) }
+                }
+                .setPositiveButton("Agree") { _, _ ->
+                    complete(result, prompt) { prompt.confirm(true) }
+                }
+        }
+    }
+
+    /**
+     * Android hardware permissions remain denied by default. A third-party
+     * storage request is different: it is commonly the explicit handoff that
+     * lets a user-initiated identity provider finish a sign-in or consent flow.
+     * Ask instead of silently denying it, while retaining the default deny for
+     * location, notifications, camera, microphone, and persistent storage.
+     */
+    @OptIn(ExperimentalGeckoViewApi::class)
     private class PermissionDelegateImpl : GeckoSession.PermissionDelegate {
         override fun onAndroidPermissionsRequest(
             session: GeckoSession,
@@ -713,13 +1041,52 @@ object TabManager {
         override fun onContentPermissionRequest(
             session: GeckoSession,
             permission: GeckoSession.PermissionDelegate.ContentPermission
-        ): GeckoResult<Int> = GeckoResult.fromValue(
+        ): GeckoResult<Int> {
             if (permission.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE) {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
-            } else {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
             }
-        )
+            if (permission.permission != GeckoSession.PermissionDelegate.PERMISSION_STORAGE_ACCESS) {
+                return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+            }
+            if (permission.value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
+                return GeckoResult.fromValue(permission.value)
+            }
+            // Earlier builds silently returned DENY here. Treat an inherited
+            // denial as ask-again so an existing user can recover a login flow
+            // after updating instead of being permanently stuck with it.
+
+            val activity = host?.activeContext() as? android.app.Activity
+            if (activity == null || activity.isFinishing || activity.isDestroyed) {
+                return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+            }
+            val result = GeckoResult<Int>()
+            val answered = AtomicBoolean(false)
+            val respond: (Int) -> Unit = { value ->
+                if (answered.compareAndSet(false, true)) result.complete(value)
+            }
+            val site = UrlBar.hostOf(permission.uri).ifBlank { "this site" }
+            val provider = UrlBar.hostOf(permission.thirdPartyOrigin).ifBlank { "a sign-in provider" }
+            try {
+                AlertDialog.Builder(activity, R.style.Theme_Minimal_Dialog)
+                    .setTitle("Allow sign-in storage?")
+                    .setMessage("$provider wants to use its sign-in storage on $site. Allow only if you started this sign-in or consent flow.")
+                    .setNegativeButton("Block") { _, _ ->
+                        respond(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                    }
+                    .setPositiveButton("Allow") { _, _ ->
+                        respond(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+                    }
+                    .setOnCancelListener {
+                        respond(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                    }
+                    .show()
+                permission.notifyShown()
+            } catch (error: Throwable) {
+                Log.w(TAG, "could not show storage-access prompt", error)
+                respond(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+            }
+            return result
+        }
 
         override fun onMediaPermissionRequest(
             session: GeckoSession,
@@ -769,8 +1136,11 @@ object TabManager {
      * and may not be on the Android main thread. Coalesce those signals first;
      * do not post a UI task and start a new database thread for every URL.
      */
-    private fun reportBlocked(tab: Tab, kind: String, url: String?) {
-        val signal = BlockedSignal(tab, tab.blockedGeneration, kind, UrlBar.hostOf(url))
+    private fun reportBlocked(tab: Tab, kind: String) {
+        // The Home screen exposes only the total, so do not parse every blocked
+        // resource URL solely to persist a host that the UI never reads. The
+        // short batch below records the current page host once per tab instead.
+        val signal = BlockedSignal(tab, tab.blockedGeneration, kind)
         synchronized(blockedSignalLock) {
             pendingBlockedSignals += signal
             if (!blockedFlushScheduled) {
@@ -789,6 +1159,7 @@ object TabManager {
         if (signals.isEmpty()) return
 
         val tabDeltas = LinkedHashMap<Tab, BlockedDelta>()
+        val pageHosts = HashMap<Tab, String>()
         val databaseDeltas = LinkedHashMap<Pair<String, String>, Int>()
         for (signal in signals) {
             // A closed tab no longer needs UI or persistent accounting. The
@@ -798,7 +1169,8 @@ object TabManager {
             if (signal.kind == "ad") delta.ads++ else delta.trackers++
             // Private browsing must not leave a blocked-request history behind.
             if (!signal.tab.private) {
-                val key = signal.host to signal.kind
+                val pageHost = pageHosts.getOrPut(signal.tab) { signal.tab.host }
+                val key = pageHost to signal.kind
                 databaseDeltas[key] = (databaseDeltas[key] ?: 0) + 1
             }
         }
@@ -816,9 +1188,6 @@ object TabManager {
             }
         }
         tabDeltas.keys.firstOrNull { it === active }?.let { currentHost?.onBlockedOnPage(it) }
-        for ((key, _) in databaseDeltas) {
-            currentHost?.onBlockedTotal(key.second, key.first)
-        }
     }
 
     private fun background(block: () -> Unit) {

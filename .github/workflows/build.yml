@@ -9,10 +9,15 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.2.3)'
+        description: 'Release tag to create or update (for example: v1.2.4)'
         required: true
-        default: 'v1.2.3'
+        default: 'v1.2.4'
         type: string
+      publish_release:
+        description: 'Publish release assets after verification (disable for a GitHub Actions validation run)'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -53,19 +58,37 @@ jobs:
           df -h / | tail -1
           test -d "$ANDROID_HOME/platforms/android-36"
 
-      - name: Assemble ARM64 bundled-engine APK
+      - name: Assemble signed ARM64 bundled-engine release APK
         working-directory: minimal-browser
-        run: ./gradlew --no-daemon --stacktrace assembleDebug
+        run: |
+          set -euo pipefail
+          # The project intentionally keeps no private signing key. Generate the
+          # standard Android debug certificate only on this disposable GitHub
+          # runner so the non-debuggable release variant is sideloadable.
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -noprompt \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android -alias androiddebugkey \
+              -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          ./gradlew --no-daemon --stacktrace assembleRelease
 
       - name: Verify generated APK contents
         run: |
           set -euo pipefail
-          APK=minimal-browser/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+          APK=minimal-browser/app/build/outputs/apk/release/app-arm64-v8a-release.apk
           AAPT2="$ANDROID_HOME/build-tools/36.0.0/aapt2"
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           test -s "$APK"
           unzip -t "$APK" >/dev/null
+          "$APKSIGNER" verify --verbose "$APK"
           "$AAPT2" dump badging "$APK" | tee /tmp/minimal-browser-badging.txt
-          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.3'" /tmp/minimal-browser-badging.txt
+          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.4'" /tmp/minimal-browser-badging.txt
+          # Assert against the generated APK, rather than source, that it is a
+          # non-debuggable release process even though it is debug-key-signed.
+          ! grep -Eq '^application-debuggable' /tmp/minimal-browser-badging.txt
           grep -Eq "native-code:.*'arm64-v8a'" /tmp/minimal-browser-badging.txt
           # Assert against the built APK, not source: exactly the requested ABI
           # and Gecko's main native library must be present.
@@ -84,16 +107,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          cp minimal-browser/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk \
-            release/MinimalBrowser-arm64-v8a-debug.apk
+          cp minimal-browser/app/build/outputs/apk/release/app-arm64-v8a-release.apk \
+            release/MinimalBrowser-arm64-v8a-release.apk
           (
             cd release
-            sha256sum MinimalBrowser-arm64-v8a-debug.apk > SHA256SUMS.txt
+            sha256sum MinimalBrowser-arm64-v8a-release.apk > SHA256SUMS.txt
           )
           ls -lh release
           cat release/SHA256SUMS.txt
 
       - name: Publish GitHub Release
+        if: github.event_name != 'workflow_dispatch' || inputs.publish_release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
@@ -103,7 +127,7 @@ jobs:
             v*) ;;
             *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
           esac
-          NOTES="Minimal Browser $TAG corrects the v1.2.2 black-screen regression while retaining the bundled Mozilla GeckoView ARM64 engine. GeckoView's already-initialized default SurfaceView is used directly; v1.2.2 redundantly reset that backend after its SurfaceHolder listener was registered, which prevented the compositor from receiving its surface callback. This release restores the field-proven APK packaging profile, retains the one-Back page-only fix, removes automatic full-frame tab screenshots, coalesces shield-event UI/database work, indexes local blocking rules, and disables remote debugging. The release verifies the generated package ID, version, ARM64-only native code, libxul.so, install-time native extraction, checksum, and a substantial bundled-engine artifact. Web navigation/search, Home links including Mail and YouTube, tabs, downloads, printing, and page-only mode use the bundled engine. Hold Web for exactly 5 seconds; one Android Back or a page double-tap restores controls and normal system bars. SHA256SUMS.txt verifies the APK. App ID: com.minimal.browser."
+          NOTES="Minimal Browser $TAG is a signed, non-debuggable Android release variant with the bundled Mozilla GeckoView ARM64 engine. It retains GeckoView's initialized default SurfaceView rather than resetting it, preserving the v1.2.3 black-screen correction. It makes one-Back page-only exit deterministic by prioritizing it over stale drawer state and explicitly leaving any asynchronous content full-screen state. It foregrounds newly opened OAuth/consent tabs only after Gecko opens them, surfaces JavaScript/FedCM/WebAuthn/redirect prompts that GeckoView otherwise dismisses by default, and uses standard rather than breakage-prone strict ETP while keeping local blocking and explicit cross-site sign-in storage approval. Performance work includes no automatic full-frame tab screenshots, batched shield UI/database work on reusable workers, indexed local rule matching, frame-coalesced progress chrome, no app-wide keep-screen-on flag, and remote debugging disabled. The release verifies APK signature, package ID, version, non-debuggable process flag, ARM64-only native code, libxul.so, install-time native extraction, checksum, and a substantial bundled-engine artifact. Web navigation/search, Home links including Mail and YouTube, tabs, downloads, printing, and page-only mode use the bundled engine. Hold Web for exactly 5 seconds; one Android Back or a page double-tap restores controls and normal system bars. The disposable-runner debug certificate is not a durable update identity, so export data and uninstall an older differently signed build if Android rejects the update. SHA256SUMS.txt verifies the APK. App ID: com.minimal.browser."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else

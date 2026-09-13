@@ -10,7 +10,7 @@ The app depends on Mozilla's release-channel GeckoView:
 org.mozilla.geckoview:geckoview:153.0.20260810162159
 ```
 
-The Gradle configuration intentionally packages only `arm64-v8a`. The resulting debug APK is large because Gecko's native browser engine is included in the app; Android System WebView is not used for browsing.
+The Gradle configuration intentionally packages only `arm64-v8a`. The resulting non-debuggable release APK is large because Gecko's native browser engine is included in the app; Android System WebView is not used for browsing.
 
 | Project setting | Value |
 | --- | --- |
@@ -38,5 +38,5 @@ The Web rail button has one fixed gesture: **hold it for exactly 5 seconds**. Pa
 
 Do not produce release APKs with a local Gradle build. Push a new `v*` tag and let [`.github/workflows/build.yml`](../.github/workflows/build.yml) build and verify the package on GitHub Actions. The release asset is:
 
-- `MinimalBrowser-arm64-v8a-debug.apk`
+- `MinimalBrowser-arm64-v8a-release.apk`
 - `SHA256SUMS.txt`

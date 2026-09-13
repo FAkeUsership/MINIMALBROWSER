@@ -14,8 +14,8 @@ android {
         // Android 8.0+; the bundled Mozilla engine itself is packaged in this APK.
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.2.3"
+        versionCode = 11
+        versionName = "1.2.4"
 
         // The requested release is intentionally ARM64-only. This makes the
         // APK substantial because it carries Gecko's native ARM64 libraries,
@@ -41,7 +41,15 @@ android {
             isMinifyEnabled = false
         }
         release {
+            // Build an actual non-debuggable release variant. The repository has
+            // no persistent private signing key, so GitHub uses Android's
+            // standard debug key only to make this sideloadable; that certificate
+            // does not make the installed process debuggable.
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            isJniDebuggable = false
             isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
