@@ -107,19 +107,25 @@ class HomeScreen(context: Context) : ScrollView(context) {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             imeOptions = EditorInfo.IME_ACTION_GO
             UiKeys.configureTextInput(this)
-            setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
+            setOnEditorActionListener { _, actionId, event ->
+                if (actionId == EditorInfo.IME_ACTION_GO ||
+                    actionId == EditorInfo.IME_ACTION_DONE ||
+                    (event != null && UiKeys.isEnterKey(event.keyCode))
+                ) {
                     submit()
                     true
                 } else false
             }
             setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_UP && UiKeys.isEnterKey(keyCode)) {
+                // Some attached keyboards are consumed by the editor before
+                // ACTION_UP. Submit on the first down event instead.
+                if (event.action == KeyEvent.ACTION_DOWN &&
+                    event.repeatCount == 0 &&
+                    UiKeys.isEnterKey(keyCode)
+                ) {
                     submit()
                     true
-                } else {
-                    false
-                }
+                } else false
             }
         }
         search.addView(searchField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -208,6 +214,13 @@ class HomeScreen(context: Context) : ScrollView(context) {
         searchField.setText("")
         UiKeys.hideKeyboard(searchField)
         onSubmitSearch?.invoke(q)
+    }
+
+    /** Activity-level fallback for physical Enter events consumed by an OEM IME/editor. */
+    fun submitSearchIfFocused(): Boolean {
+        if (!searchField.hasFocus() || searchField.text?.toString()?.trim().isNullOrEmpty()) return false
+        submit()
+        return true
     }
 
     private fun quickLinkView(link: QuickLink): View {

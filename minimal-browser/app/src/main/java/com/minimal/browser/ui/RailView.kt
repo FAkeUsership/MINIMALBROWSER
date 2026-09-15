@@ -40,9 +40,9 @@ class RailView(context: Context) : FrameLayout(context) {
             bottomMargin = context.dp(12)
         })
 
-        home = make(R.drawable.ic_home, context.getString(R.string.rail_home), false)
-        web = make(R.drawable.ic_globe, context.getString(R.string.rail_web), true)
-        tabs = make(R.drawable.ic_tabs, context.getString(R.string.rail_tabs), false)
+        home = make(R.drawable.ic_home, context.getString(R.string.rail_home))
+        web = make(R.drawable.ic_globe, context.getString(R.string.rail_web))
+        tabs = make(R.drawable.ic_tabs, context.getString(R.string.rail_tabs))
 
         column.addView(home, buttonParams())
         column.addView(web, buttonParams())
@@ -54,7 +54,7 @@ class RailView(context: Context) : FrameLayout(context) {
             LinearLayout.LayoutParams(1, 0).apply { weight = 1f }
         )
 
-        settings = make(R.drawable.ic_gear, context.getString(R.string.rail_settings), false)
+        settings = make(R.drawable.ic_gear, context.getString(R.string.rail_settings))
         column.addView(settings, buttonParams())
 
         buttons = listOf(home, web, tabs, settings)
@@ -65,8 +65,8 @@ class RailView(context: Context) : FrameLayout(context) {
         gravity = Gravity.CENTER_HORIZONTAL
     }
 
-    private fun make(iconRes: Int, label: String, hold: Boolean) =
-        RailButton(context, iconRes, label, hold).also { it.rememberIcon(iconRes) }
+    private fun make(iconRes: Int, label: String) =
+        RailButton(context, iconRes, label).also { it.rememberIcon(iconRes) }
 
     private fun logo() = TextView(context).apply {
         text = "M"

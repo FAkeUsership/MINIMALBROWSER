@@ -24,8 +24,8 @@ object Prefs {
     private const val K_JS = "javascript"
     private const val K_DESKTOP_UA = "desktop_ua"
     private const val K_FIRST_RUN = "first_run"
-    private const val K_HOLD_HINT_SHOWN = "hold_hint_shown"
     private const val K_HIDE_STATUS_BAR = "hide_status_bar"
+    private const val K_SHOW_MOBILE_KEYBOARD = "show_mobile_keyboard"
 
     lateinit var sp: SharedPreferences
         private set
@@ -61,6 +61,15 @@ object Prefs {
         get() = sp.getBoolean(K_HIDE_STATUS_BAR, false)
         set(v) = sp.edit().putBoolean(K_HIDE_STATUS_BAR, v).apply()
 
+    /**
+     * Touch-first devices show Android's software IME by default. A connected
+     * physical keyboard always wins; this preference also lets the person opt
+     * out when Android cannot identify an attached keyboard.
+     */
+    var showMobileKeyboard: Boolean
+        get() = sp.getBoolean(K_SHOW_MOBILE_KEYBOARD, true)
+        set(v) = sp.edit().putBoolean(K_SHOW_MOBILE_KEYBOARD, v).apply()
+
     /** Page zoom default, 80..140 — matches the HTML range slider. */
     var textSizePercent: Int
         get() = sp.getInt(K_TEXT_SIZE, 100)
@@ -88,19 +97,10 @@ object Prefs {
         get() = sp.getBoolean(K_DESKTOP_UA, false)
         set(v) = sp.edit().putBoolean(K_DESKTOP_UA, v).apply()
 
-    /* ---- Full-screen gesture ---- */
-    /** The product gesture is deliberately fixed: hold Web for exactly five seconds. */
-    const val HOLD_MILLIS: Long = 5_000L
-    val holdMillis: Long get() = HOLD_MILLIS
-
     /* ---- misc ---- */
     var firstRun: Boolean
         get() = sp.getBoolean(K_FIRST_RUN, true)
         set(v) = sp.edit().putBoolean(K_FIRST_RUN, v).apply()
-
-    var holdHintShown: Boolean
-        get() = sp.getBoolean(K_HOLD_HINT_SHOWN, false)
-        set(v) = sp.edit().putBoolean(K_HOLD_HINT_SHOWN, v).apply()
 }
 
 object HomePageModes {

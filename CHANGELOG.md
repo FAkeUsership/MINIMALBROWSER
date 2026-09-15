@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.7 — Compact browser chrome and reliable input
+
+- Removes the 53dp black `Web`/breadcrumb/shields header instead of merely hiding it in page-only mode. The browser viewport now begins directly below the compact white Web toolbar, and its useful actions remain reachable from the existing real three-dot drawer (including shields and a working Full screen action).
+- Deletes the rejected five-second Web-rail hold and its progress ring completely. A compact, persistent top-right corners button now explicitly enters page-only mode; in page-only mode it becomes a compact close control in the same location. Android Back and page double-tap remain supplementary exits, rather than the primary way out.
+- Keeps the native blank-tab start/search panel visible while the omnibox is edited. With `adjustResize`, content now remains visible above Android’s software keyboard instead of exposing white `about:blank` behind a keyboard-only screen.
+- Adds **Settings → Appearance → Show mobile keyboard**. It is on by default for touch use, can be turned off/on explicitly, and physical USB/Bluetooth keyboard detection continues to suppress the Android IME automatically. The same policy is applied to Gecko page fields without clearing their focus.
+- Strengthens Home and omnibox submission for attached keyboards. Both ordinary and numpad Enter now submit on the first hardware key-down or editor action, with a focused native-field fallback in `MainActivity` for OEM editor/IME paths that previously consumed Enter before an `EditText` listener saw it.
+- Makes normal Web system bars white with dark system icons and disables Android Q+ status/navigation contrast enforcement. This avoids opaque black strips around a landscape cutout and beneath a white page while leaving normal touch/system navigation available; page-only mode still hides the bars.
+- These changes are source-reviewed/static-checked and must still be validated on a real Android 14+ ARM64 device for its specific HID, IME, notch, gesture-navigation, and live-site behavior before claiming device confirmation.
+
 ## v1.2.6 — External keyboard and mouse support
 
 - Detects connected physical keyboards from Android configuration **and** the active input-device list, then refreshes native input behavior when a USB/Bluetooth keyboard is added, removed, or changes. Home search, the omnibox, Settings text rows, and Gecko prompt text controls no longer explicitly request Android’s software keyboard while a physical keyboard is available.

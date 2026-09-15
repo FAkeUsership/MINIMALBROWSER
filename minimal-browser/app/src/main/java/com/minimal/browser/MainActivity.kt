@@ -5,22 +5,20 @@ import android.content.Context
 import android.content.Intent
 import android.hardware.input.InputManager
 import android.graphics.Color
-import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.util.Log
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -39,8 +37,6 @@ import com.minimal.browser.ui.TabsScreen
 import com.minimal.browser.ui.UiKeys
 import com.minimal.browser.ui.WebScreen
 import com.minimal.browser.ui.dp
-import com.minimal.browser.ui.icon
-import com.minimal.browser.ui.roundRect
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebResponse
 import java.util.concurrent.Executors
@@ -51,8 +47,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the bundled Mozilla GeckoView engine.
  *
  * Page-only mode:
- *   • hold the **Web** rail button for exactly 5 seconds → only the page stays
- *   • Android Back or a double tap on the page → normal browser controls return
+ *   • a compact top-right toggle explicitly enters and leaves the page view
+ *   • Android Back or a double tap on the page remain supplementary exits
  *   • Android system bars are immersive only while the page-only mode is active
  */
 class MainActivity : AppCompatActivity(), TabManager.Host,
@@ -60,14 +56,6 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     /* ---------------- screens ---------------- */
     private lateinit var rail: RailView
-    private lateinit var topBar: LinearLayout
-    private lateinit var topDivider: View
-    private lateinit var topTitle: TextView
-    private lateinit var topCrumb: TextView
-    private lateinit var shieldPill: LinearLayout
-    private lateinit var shieldDot: View
-    private lateinit var shieldLabel: TextView
-
     private lateinit var viewport: FrameLayout
     private lateinit var homeScreen: HomeScreen
     private lateinit var webScreen: WebScreen
@@ -83,7 +71,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private var current = Screen.HOME
     private var previousScreen = Screen.HOME
     private var visibleListMode: ListMode? = null
-    /** App page-only mode, entered after holding Web for five seconds. */
+    /** App page-only mode, entered from the explicit compact toggle or menu. */
     private var fullScreen = false
     /** A web page's own HTML/video full-screen request. */
     private var videoFullScreen = false
@@ -92,7 +80,6 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private var lastEngineFailure: String? = null
 
     private var lastExitAt = 0L
-    private var firstHoldHintDone = false
 
     // Chrome callbacks may arrive during navigation. Keep bookmark queries off
     // the render/UI thread and reuse one worker rather than spawning a thread
@@ -106,7 +93,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private var drawerBookmarkValue = false
     private var drawerBookmarkRequest = 0L
     private var lastDownloadsRefreshAt = 0L
-    private var lastHardwareImeHideAt = 0L
+    private var lastImeHideAt = 0L
     private var lastMouseBackAt = 0L
     private var lastMouseForwardAt = 0L
     private var inputDeviceListenerRegistered = false
@@ -187,8 +174,18 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                 }
             }
         }
-        if (event.action == KeyEvent.ACTION_DOWN && UiKeys.hasHardwareKeyboard(this)) {
-            maybeHideSoftwareKeyboardForHardware()
+        if (event.action == KeyEvent.ACTION_DOWN &&
+            event.repeatCount == 0 &&
+            UiKeys.isEnterKey(event.keyCode) &&
+            submitFocusedNativeText()
+        ) {
+            // Keep this activity-level fallback ahead of the normal shortcut
+            // path. A few keyboard/IME combinations consume EditText Enter
+            // before its listener runs; this still submits the omnibox once.
+            return true
+        }
+        if (event.action == KeyEvent.ACTION_DOWN && !UiKeys.shouldShowSoftwareKeyboard(this)) {
+            hideSoftwareKeyboardIfSuppressed()
         }
         if (
             event.action == KeyEvent.ACTION_DOWN &&
@@ -222,21 +219,21 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                     return true
                 }
             }
-            window.decorView.postDelayed({ maybeHideSoftwareKeyboardForHardware(force = true) }, 90L)
+            window.decorView.postDelayed({ hideSoftwareKeyboardIfSuppressed(force = true) }, 90L)
         }
         return super.dispatchGenericMotionEvent(event)
     }
 
     /**
-     * A mouse click (or a touch while a docked keyboard is present) can focus a
-     * page text field and request Android's IME. Hide only the software IME on
-     * the next loop turn; do not clear focus, so physical typing still goes to
-     * the field that was clicked.
+     * A mouse click, docked keyboard, or the explicit "mobile keyboard off"
+     * preference can focus a page text field and still make Gecko request the
+     * IME. Hide only that software IME on the next loop turn; do not clear
+     * focus, so physical typing still reaches the field that was clicked.
      */
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         val handled = super.dispatchTouchEvent(event)
-        if (event.actionMasked == MotionEvent.ACTION_UP && UiKeys.hasHardwareKeyboard(this)) {
-            window.decorView.postDelayed({ maybeHideSoftwareKeyboardForHardware(force = true) }, 90L)
+        if (event.actionMasked == MotionEvent.ACTION_UP && !UiKeys.shouldShowSoftwareKeyboard(this)) {
+            window.decorView.postDelayed({ hideSoftwareKeyboardIfSuppressed(force = true) }, 90L)
         }
         return handled
     }
@@ -368,17 +365,21 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         return true
     }
 
+    private fun submitFocusedNativeText(): Boolean =
+        (this::webScreen.isInitialized && webScreen.submitAddressIfEditing()) ||
+            (this::homeScreen.isInitialized && homeScreen.submitSearchIfFocused())
+
     private fun isMouseEvent(event: MotionEvent): Boolean =
         (event.source and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
 
     private fun isMouseKeyEvent(event: KeyEvent): Boolean =
         (event.source and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
 
-    private fun maybeHideSoftwareKeyboardForHardware(force: Boolean = false) {
-        if (!UiKeys.hasHardwareKeyboard(this)) return
+    private fun hideSoftwareKeyboardIfSuppressed(force: Boolean = false) {
+        if (UiKeys.shouldShowSoftwareKeyboard(this)) return
         val now = System.currentTimeMillis()
-        if (!force && now - lastHardwareImeHideAt < 300L) return
-        lastHardwareImeHideAt = now
+        if (!force && now - lastImeHideAt < 300L) return
+        lastImeHideAt = now
         UiKeys.hideKeyboard(window.decorView, clearFocus = false)
     }
 
@@ -395,7 +396,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             homeScreen.refreshInputMode()
             webScreen.refreshInputMode()
             settingsScreen.refreshInputMode()
-            maybeHideSoftwareKeyboardForHardware(force = true)
+            hideSoftwareKeyboardIfSuppressed(force = true)
         }
     }
 
@@ -435,14 +436,6 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             weight = 1f
         })
 
-        topBar = buildTopBar()
-        mainCol.addView(topBar, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(52)
-        ))
-        topDivider = View(this).apply { setBackgroundColor(Ink.EDGE) }
-        mainCol.addView(topDivider,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
-
         viewport = FrameLayout(this).apply { setBackgroundColor(Ink.SHELL) }
         mainCol.addView(viewport, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0
@@ -480,76 +473,13 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         // chrome inputs opt out themselves; this insets safety net covers the
         // engine-owned field without taking focus away from it.
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            if (UiKeys.hasHardwareKeyboard(this) && insets.isVisible(WindowInsetsCompat.Type.ime())) {
-                view.post { maybeHideSoftwareKeyboardForHardware() }
+            if (!UiKeys.shouldShowSoftwareKeyboard(this) && insets.isVisible(WindowInsetsCompat.Type.ime())) {
+                view.post { hideSoftwareKeyboardIfSuppressed() }
             }
             insets
         }
 
         return root
-    }
-
-    private fun buildTopBar(): LinearLayout {
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Ink.SHELL2)
-            setPadding(dp(16), 0, dp(16), 0)
-        }
-
-        topTitle = TextView(this).apply {
-            text = "Home"
-            setTextColor(Ink.TEXT)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        bar.addView(topTitle)
-
-        topCrumb = TextView(this).apply {
-            text = getString(R.string.crumb_browser)
-            setTextColor(Ink.MUTED)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTypeface(typeface, Typeface.NORMAL)
-        }
-        bar.addView(topCrumb, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { leftMargin = dp(14) })
-
-        val spacer = View(this)
-        bar.addView(spacer, LinearLayout.LayoutParams(0, 1).apply { weight = 1f })
-
-        /* shield pill */
-        shieldPill = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = roundRect(99, Ink.PANEL, Ink.EDGE2)
-            setPadding(dp(12), dp(6), dp(12), dp(6))
-            isClickable = true
-            isFocusable = true
-        }
-        shieldDot = View(this).apply { background = roundRect(99, Color.WHITE) }
-        shieldPill.addView(shieldDot, LinearLayout.LayoutParams(dp(7), dp(7)).apply { rightMargin = dp(7) })
-        shieldLabel = TextView(this).apply {
-            text = getString(R.string.shields_on)
-            setTextColor(Ink.TEXT)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTypeface(typeface, Typeface.BOLD)
-        }
-        shieldPill.addView(shieldLabel)
-        shieldPill.setOnClickListener { toggleShieldsFromPill() }
-        bar.addView(shieldPill)
-
-        /* menu button */
-        val menu = ImageView(this).apply {
-            icon(R.drawable.ic_menu, Ink.MUTED)
-            contentDescription = getString(R.string.cd_menu)
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { drawer.toggle() }
-        }
-        bar.addView(menu, LinearLayout.LayoutParams(dp(36), dp(36)).apply { leftMargin = dp(10) })
-
-        return bar
     }
 
     private fun wireUp() {
@@ -559,21 +489,13 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         rail.tabs.onTap = { leaveFullScreenIfNeeded(); show(Screen.TABS) }
         rail.settings.onTap = { leaveFullScreenIfNeeded(); show(Screen.SETTINGS) }
 
-        rail.web.onHoldProgressStart = {
-            if (!firstHoldHintDone && !Prefs.holdHintShown) {
-                firstHoldHintDone = true
-                Prefs.holdHintShown = true
-                toast.say(getString(R.string.t_hold_hint))
-            }
-        }
-        rail.web.onHoldComplete = { enterPageOnly() }
-
         /* ---- web screen ---- */
         webScreen.onBack = { TabManager.goBack() }
         webScreen.onForward = { TabManager.goForward() }
         webScreen.onReload = { TabManager.reload() }
         webScreen.onTabs = { leaveFullScreenIfNeeded(); show(Screen.TABS) }
         webScreen.onMenu = { drawer.toggle() }
+        webScreen.onToggleFullScreen = { togglePageOnly() }
         // In page-only mode the content is visually clean. A double tap anywhere
         // on the page restores normal browser controls.
         webScreen.onPageDoubleTap = { if (fullScreen) exitPageOnly() }
@@ -629,35 +551,30 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
         when (screen) {
             Screen.HOME -> {
-                rail.setActive(rail.home); topTitle.text = "Home"
-                topCrumb.text = getString(R.string.crumb_browser)
+                rail.setActive(rail.home)
                 homeScreen.refresh()
                 UiKeys.hideKeyboard(homeScreen)
             }
 
             Screen.WEB -> {
                 rail.setActive(rail.web)
-                topTitle.text = "Web"
                 var tab: Tab? = null
                 if (ensureBrowserReady()) {
                     tab = TabManager.active ?: openNewTabSafely()
                     attachActiveTabToVisibleView(tab)
                 }
-                topCrumb.text = tab?.host?.ifEmpty { "loading" } ?: getString(R.string.crumb_browser)
                 webScreen.syncTo(tab)
             }
 
             Screen.TABS -> {
-                rail.setActive(rail.tabs); topTitle.text = "Tabs"
+                rail.setActive(rail.tabs)
                 // Tab cards intentionally use their lightweight preview artwork.
                 // Do not make a full compositor readback just to open this screen.
                 tabsScreen.refresh(TabManager.tabs, TabManager.active?.id)
-                topCrumb.text = "${TabManager.tabs.size} open tabs"
             }
 
             Screen.SETTINGS -> {
-                rail.setActive(rail.settings); topTitle.text = "Settings"
-                topCrumb.text = "preferences"
+                rail.setActive(rail.settings)
                 settingsScreen.render()
             }
 
@@ -685,33 +602,31 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     /* ================================================================== */
 
     /**
-     * Applies true page-only mode. There is no app control, divider, toast, or
-     * system bar over the web page — it matches the clean reference screenshot.
+     * Applies page-only mode. Normal browser chrome disappears, but the Web
+     * surface retains one compact top-right toggle as the deliberate, reliable
+     * way to return — there is no hidden hold gesture.
      */
     private fun applyFullScreen() {
         val pageOnly = fullScreen || videoFullScreen
         val onWeb = current == Screen.WEB
 
         rail.visibility = if (pageOnly) View.GONE else View.VISIBLE
-        topBar.visibility = if (pageOnly) View.GONE else View.VISIBLE
-        topDivider.visibility = if (pageOnly) View.GONE else View.VISIBLE
         webScreen.setFullScreen(pageOnly && onWeb)
 
-        // A toast, even for a short time, would violate the "only the page"
-        // contract. This also suppresses any later background callback toast.
+        // A toast, even for a short time, would intrude on the page surface.
         toast.setSuppressed(pageOnly)
         if (!pageOnly) webScreen.syncTo(TabManager.active)
         applySystemUi(pageOnly)
     }
 
     /**
-     * Page-only mode always hides both Android bars. On ordinary screens the
-     * Appearance setting may hide only the top status bar while leaving the
-     * navigation/Back area available. DEFAULT behavior deliberately keeps a
-     * gesture-navigation Back gesture reaching this Activity rather than first
-     * being consumed only to reveal a transient navigation bar.
+     * Page-only mode hides both Android bars. On ordinary Web screens the
+     * system-bar surfaces are white with dark icons, rather than leaving opaque
+     * black strips beside a landscape cutout or below a white web page. Other
+     * native screens retain their dark shell bars for visual continuity.
      */
     private fun applySystemUi(pageOnly: Boolean = fullScreen || videoFullScreen) {
+        applyCutoutLayoutMode(pageOnly)
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         WindowCompat.setDecorFitsSystemWindows(window, !pageOnly)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
@@ -719,6 +634,18 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.hide(WindowInsetsCompat.Type.displayCutout())
         } else {
+            val webSurface = current == Screen.WEB
+            val barColor = if (webSurface) Color.WHITE else Ink.SHELL2
+            window.statusBarColor = barColor
+            window.navigationBarColor = barColor
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Prevent Android from layering an automatic dark contrast band
+                // over the white navigation/status surfaces on gesture devices.
+                window.isStatusBarContrastEnforced = false
+                window.isNavigationBarContrastEnforced = false
+            }
+            controller.isAppearanceLightStatusBars = webSurface
+            controller.isAppearanceLightNavigationBars = webSurface
             controller.show(WindowInsetsCompat.Type.navigationBars())
             controller.show(WindowInsetsCompat.Type.displayCutout())
             if (Prefs.hideStatusBar) {
@@ -729,7 +656,25 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         }
     }
 
-    /** Enter page-only mode after the Web rail button has been held for 5 seconds. */
+    /**
+     * Normal browser UI stays outside a cutout. In explicit page-only mode use
+     * the widest cutout policy the platform offers so the Gecko surface fills
+     * the landscape frame instead of being surrounded by a black letterbox.
+     */
+    private fun applyCutoutLayoutMode(pageOnly: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
+        val targetMode = when {
+            !pageOnly -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            else -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        if (window.attributes.layoutInDisplayCutoutMode != targetMode) {
+            window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = targetMode }
+        }
+    }
+
+    /** Enter page-only mode from the visible top-right toggle or the three-dot menu. */
     private fun enterPageOnly() {
         if (fullScreen) return
         // Do not hide every control around a failed engine start. Establish a
@@ -740,6 +685,18 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         drawer.closeImmediately()
         webScreen.cancelEditing()
         show(Screen.WEB)
+    }
+
+    private fun togglePageOnly() {
+        when {
+            fullScreen -> exitPageOnly()
+            videoFullScreen -> {
+                videoFullScreen = false
+                TabManager.exitPageFullScreen()
+                applyFullScreen()
+            }
+            else -> enterPageOnly()
+        }
     }
 
     /**
@@ -1015,12 +972,6 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     override fun onTabsChanged() {
         if (current == Screen.TABS) tabsScreen.refresh(TabManager.tabs, TabManager.active?.id)
-        when (current) {
-            Screen.TABS -> topCrumb.text = "${TabManager.tabs.size} open tabs"
-            Screen.WEB -> topCrumb.text =
-                TabManager.active?.host?.ifEmpty { "loading" } ?: topCrumb.text
-            else -> { /* crumb unchanged */ }
-        }
         syncDrawer()
     }
 
@@ -1028,7 +979,6 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         if (current == Screen.WEB) {
             attachActiveTabToVisibleView(tab)
             webScreen.syncTo(tab)
-            topCrumb.text = tab?.host?.ifEmpty { "loading" } ?: getString(R.string.crumb_browser)
         }
         syncDrawer()
     }
@@ -1252,12 +1202,11 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     override fun onToggleFullScreen() {
-        toast.say(getString(R.string.t_hold_web_hint))
+        togglePageOnly()
     }
 
     override fun onToggleShields(on: Boolean) {
         (application as BrowserApp).applyShields()
-        syncShieldPill()
         webScreen.syncTo(TabManager.active)
         toast.say(if (on) getString(R.string.shields_on) else getString(R.string.shields_off))
     }
@@ -1385,6 +1334,10 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         applySystemUi()
     }
 
+    override fun onMobileKeyboardVisibilityChanged() {
+        requestInputModeRefresh()
+    }
+
     override fun onShowAbout() {
         AlertDialog.Builder(this, R.style.Theme_Minimal_Dialog)
             .setTitle("Minimal Browser ${BuildConfig.VERSION_NAME}")
@@ -1398,23 +1351,8 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     /* ================================================================== */
-    /*  shields pill + drawer sync                                         */
+    /*  drawer sync                                                        */
     /* ================================================================== */
-
-    private fun toggleShieldsFromPill() {
-        Prefs.shieldsOn = !Prefs.shieldsOn
-        (application as BrowserApp).applyShields()
-        syncShieldPill()
-        webScreen.syncTo(TabManager.active)
-        syncDrawer()
-    }
-
-    private fun syncShieldPill() {
-        val on = Prefs.shieldsOn
-        shieldLabel.text = getString(if (on) R.string.shields_on else R.string.shields_off)
-        shieldLabel.setTextColor(if (on) Ink.TEXT else Ink.MUTED)
-        shieldDot.background = roundRect(99, if (on) Color.WHITE else Ink.MUTED)
-    }
 
     /**
      * The drawer is chrome, not page content. Never make navigation wait for a

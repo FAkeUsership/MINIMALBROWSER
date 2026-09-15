@@ -21,6 +21,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.minimal.browser.Prefs
 import com.minimal.browser.R
 import com.minimal.browser.Tab
 import com.minimal.browser.UrlBar
@@ -41,6 +42,8 @@ class WebScreen(context: Context) : LinearLayout(context) {
     var onReload: (() -> Unit)? = null
     var onTabs: (() -> Unit)? = null
     var onMenu: (() -> Unit)? = null
+    /** Small persistent top control for entering and leaving page-only mode. */
+    var onToggleFullScreen: (() -> Unit)? = null
     var onSubmitAddress: ((String) -> Unit)? = null
     /** Used only while page-only mode is active. */
     var onPageDoubleTap: (() -> Unit)? = null
@@ -60,6 +63,7 @@ class WebScreen(context: Context) : LinearLayout(context) {
     private val startPanel: BrowserStartPanel
     private var attachedGeckoView: GeckoView? = null
     val blockedBanner: TextView
+    private val pageOnlyToggle: ImageView
 
     private val btnBack: ImageView
     private val btnForward: ImageView
@@ -221,8 +225,25 @@ class WebScreen(context: Context) : LinearLayout(context) {
             topMargin = context.dp(10)
         })
 
-        // Page-only mode intentionally has no floating back pill or overlay.
-        // Android Back and a double tap on the page restore normal controls.
+        // A deliberately small, persistent control makes full screen explicit:
+        // tap the corners icon to enter, then the close icon in the same place
+        // to leave. It occupies no toolbar width or permanent header height.
+        pageOnlyToggle = ImageView(context).apply {
+            icon(R.drawable.ic_fullscreen, Color.WHITE)
+            contentDescription = context.getString(R.string.cd_enter_fullscreen)
+            background = context.roundRect(99, 0xB5111111.toInt())
+            isClickable = true
+            isFocusable = true
+            val pad = context.dp(6)
+            setPadding(pad, pad, pad, pad)
+            elevation = context.dp(6).toFloat()
+            setOnClickListener { onToggleFullScreen?.invoke() }
+        }
+        container.addView(pageOnlyToggle, FrameLayout.LayoutParams(context.dp(36), context.dp(36)).apply {
+            gravity = Gravity.TOP or Gravity.END
+            topMargin = context.dp(8)
+            rightMargin = context.dp(8)
+        })
 
         addView(container, LayoutParams(LayoutParams.MATCH_PARENT, 0).apply { weight = 1f })
     }
@@ -256,19 +277,28 @@ class WebScreen(context: Context) : LinearLayout(context) {
             // label can be shortened without truncating what the person edits.
             setText(fullAddress)
             setSelection(text?.length ?: 0)
-            setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
+            setOnEditorActionListener { _, actionId, event ->
+                // Many USB/Bluetooth keyboards report IME_NULL instead of GO.
+                // Accept both editor actions and the attached physical Enter
+                // event, so a mouse click on Go is never required.
+                if (actionId == EditorInfo.IME_ACTION_GO ||
+                    actionId == EditorInfo.IME_ACTION_DONE ||
+                    (event != null && UiKeys.isEnterKey(event.keyCode))
+                ) {
                     commit(this.text?.toString().orEmpty())
                     true
                 } else false
             }
             setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_UP && UiKeys.isEnterKey(keyCode)) {
+                // Consume the initial down event. Handling only ACTION_UP can
+                // miss keyboards whose EditText editor consumes the key first.
+                if (event.action == KeyEvent.ACTION_DOWN &&
+                    event.repeatCount == 0 &&
+                    UiKeys.isEnterKey(keyCode)
+                ) {
                     commit(this.text?.toString().orEmpty())
                     true
-                } else {
-                    false
-                }
+                } else false
             }
         }
         addressPill.addView(input, index, LayoutParams(0, LayoutParams.WRAP_CONTENT).apply { weight = 1f })
@@ -309,6 +339,16 @@ class WebScreen(context: Context) : LinearLayout(context) {
 
     /** Opens the omnibox for Ctrl+L/F6 and the native blank-tab search card. */
     fun focusAddress() = beginEditing()
+
+    /**
+     * Activity-level fallback for USB/Bluetooth Enter events which an OEM editor
+     * consumes before an EditText listener sees them.
+     */
+    fun submitAddressIfEditing(): Boolean {
+        if (!editing) return false
+        commit(findEditText()?.text?.toString().orEmpty())
+        return true
+    }
 
     /** @return true when Escape closed an active address edit. */
     fun cancelEditingIfActive(): Boolean {
@@ -385,7 +425,10 @@ class WebScreen(context: Context) : LinearLayout(context) {
     }
 
     private fun updateStartPanel() {
-        startPanel.visibility = if (!pageOnly && blankTab && !editing) VISIBLE else GONE
+        // Keep useful start/search content behind the omnibox while Android
+        // resizes for the IME. Hiding it as soon as editing began exposed the
+        // blank white about:blank document and made search feel keyboard-only.
+        startPanel.visibility = if (!pageOnly && blankTab) VISIBLE else GONE
     }
 
     /**
@@ -451,14 +494,19 @@ class WebScreen(context: Context) : LinearLayout(context) {
     }
 
     /**
-     * Page-only mode leaves the active web page as the sole visible view: no
-     * address bar, divider, loading line, blocked badge, or floating control.
+     * Page-only mode hides normal chrome but deliberately retains one compact,
+     * explicit toggle at the top-right. It is the primary way to return, with
+     * Android Back and a page double tap kept as supplementary exits.
      */
     fun setFullScreen(on: Boolean) {
         pageOnly = on
         webBar.visibility = if (on) GONE else VISIBLE
         webDivider.visibility = if (on) GONE else VISIBLE
         progressTrack.visibility = if (on) GONE else INVISIBLE
+        pageOnlyToggle.icon(if (on) R.drawable.ic_x else R.drawable.ic_fullscreen, Color.WHITE)
+        pageOnlyToggle.contentDescription = context.getString(
+            if (on) R.string.cd_exit_fullscreen else R.string.cd_enter_fullscreen
+        )
         if (on) {
             removeCallbacks(progressRenderRunnable)
             removeCallbacks(hideProgress)
@@ -541,17 +589,25 @@ object UiKeys {
         }
     }
 
+    /**
+     * A physical keyboard always suppresses the mobile IME. Without one, the
+     * explicit Appearance setting decides whether native and Gecko text fields
+     * may ask Android to show it.
+     */
+    fun shouldShowSoftwareKeyboard(context: Context): Boolean =
+        Prefs.showMobileKeyboard && !hasHardwareKeyboard(context)
+
     fun configureTextInput(input: EditText) {
-        input.showSoftInputOnFocus = !hasHardwareKeyboard(input.context)
+        input.showSoftInputOnFocus = shouldShowSoftwareKeyboard(input.context)
     }
 
     fun isEnterKey(keyCode: Int): Boolean =
         keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
 
     fun showKeyboard(view: View) {
-        if (hasHardwareKeyboard(view.context)) return
+        if (!shouldShowSoftwareKeyboard(view.context)) return
         view.postDelayed({
-            if (hasHardwareKeyboard(view.context)) return@postDelayed
+            if (!shouldShowSoftwareKeyboard(view.context)) return@postDelayed
             val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE)
                 as? android.view.inputmethod.InputMethodManager
             imm?.showSoftInput(view, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)

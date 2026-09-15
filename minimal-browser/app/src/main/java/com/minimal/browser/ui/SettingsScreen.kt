@@ -41,6 +41,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         fun onClearData()
         fun onShowAbout()
         fun onStatusBarVisibilityChanged()
+        fun onMobileKeyboardVisibilityChanged()
         fun toast(message: String)
     }
 
@@ -183,21 +184,31 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
 
     private fun appearancePanel(): List<View> {
         val out = ArrayList<View>()
-        out += group("Full screen — gesture controls")
+        out += group("Full screen")
         out += infoRow(
-            R.drawable.ic_globe,
-            "Hold the Web icon for 5 seconds",
-            "Everything hides — the app bars, address controls, and Android system bars. Only the page stays."
+            R.drawable.ic_fullscreen,
+            "Use the small top-right button",
+            "Tap the corners button to enter page-only mode. It stays at the top-right as a small close button so you can always leave explicitly."
         )
         out += infoRow(
             R.drawable.ic_back,
             "Android Back or double-tap the page",
-            "Restores the normal browser controls and normal Android system bars."
+            "These also restore normal browser controls and Android system bars."
         )
 
         out += group("Keyboard & mouse")
+        out += switchRow(
+            R.drawable.ic_keyboard,
+            "Show mobile keyboard",
+            "Show Android's on-screen keyboard when you tap a text field. Turn it off for a desktop-style keyboard or mouse setup; a connected physical keyboard still keeps it hidden.",
+            Prefs.showMobileKeyboard
+        ) { on ->
+            Prefs.showMobileKeyboard = on
+            callback?.onMobileKeyboardVisibilityChanged()
+            callback?.toast(if (on) "Mobile keyboard enabled" else "Mobile keyboard hidden")
+        }
         out += infoRow(
-            R.drawable.ic_search,
+            R.drawable.ic_keyboard,
             "External keyboard",
             "A connected USB or Bluetooth keyboard keeps the Android on-screen keyboard hidden. Enter and numpad Enter submit a search or address."
         )

@@ -23,8 +23,6 @@
     <!-- page-only mode and browser recovery -->
     <string name="t_engine_failed">The bundled Minimal Browser engine could not start. Try reopening Web.</string>
     <string name="t_engine_session_failed">Minimal Browser could not start this page. Try opening it again.</string>
-    <string name="t_hold_hint">Keep holding to enter page-only mode…</string>
-    <string name="t_hold_web_hint">Hold the Web icon (left rail) for 5 seconds</string>
     <string name="t_tab_closed">Tab closed</string>
     <string name="t_new_tab">New tab opened</string>
     <string name="t_searching_fmt">Searching \u201C%1$s\u201D …</string>
@@ -43,6 +41,8 @@
     <string name="cd_back">Back</string>
     <string name="cd_forward">Forward</string>
     <string name="cd_reload">Reload</string>
+    <string name="cd_enter_fullscreen">Enter full screen</string>
+    <string name="cd_exit_fullscreen">Exit full screen</string>
     <string name="cd_menu">Menu</string>
     <string name="cd_close">Close</string>
     <string name="cd_tabs">Tabs</string>

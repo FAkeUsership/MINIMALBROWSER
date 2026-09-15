@@ -159,7 +159,7 @@ class MenuDrawer(context: Context) : FrameLayout(context) {
 
         menuBox += separator()
         menuBox += label("Controls")
-        menuBox += item(R.drawable.ic_globe, "Page-only mode", "hold Web for 5 seconds") {
+        menuBox += item(R.drawable.ic_fullscreen, "Full screen", "small top-right toggle") {
             callback?.onToggleFullScreen(); close()
         }
         menuBox += item(R.drawable.ic_search, "Find in page", null) { callback?.onFindInPage(); close() }

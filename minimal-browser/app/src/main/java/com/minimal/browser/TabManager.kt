@@ -515,10 +515,11 @@ object TabManager {
 
             override fun showSoftInput(session: GeckoSession) {
                 val view = session.textInput.view
-                if (view != null && UiKeys.hasHardwareKeyboard(view.context)) {
+                if (view != null && !UiKeys.shouldShowSoftwareKeyboard(view.context)) {
                     // Leave GeckoView and the HTML field focused. Only decline the
                     // software keyboard request so raw physical key events retain
-                    // their normal Gecko delivery path.
+                    // their normal Gecko delivery path. This also respects the
+                    // explicit "Show mobile keyboard" setting.
                     UiKeys.hideKeyboard(view, clearFocus = false)
                 } else {
                     defaultDelegate.showSoftInput(session)
