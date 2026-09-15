@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.2.7)'
+        description: 'Release tag to create or update (for example: v1.2.8)'
         required: true
-        default: 'v1.2.7'
+        default: 'v1.2.8'
         type: string
       publish_release:
         description: 'Publish release assets after verification (disable for a GitHub Actions validation run)'
@@ -90,7 +90,7 @@ jobs:
           unzip -t "$APK" >/dev/null
           "$APKSIGNER" verify --verbose "$APK"
           "$AAPT2" dump badging "$APK" | tee /tmp/minimal-browser-badging.txt
-          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.7'" /tmp/minimal-browser-badging.txt
+          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.8'" /tmp/minimal-browser-badging.txt
           # Assert against the generated APK, rather than source, that it is a
           # non-debuggable release process even though it is debug-key-signed.
           ! grep -Eq '^application-debuggable' /tmp/minimal-browser-badging.txt
@@ -132,7 +132,7 @@ jobs:
             v*) ;;
             *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
           esac
-          NOTES="Minimal Browser $TAG is a signed, non-debuggable Android release variant with the bundled Mozilla GeckoView ARM64 engine. v1.2.7 removes the wasteful black Web/breadcrumb header and the five-second Web-rail hold. A compact top-right fullscreen control now explicitly enters page-only mode and remains as an equally compact close control to exit; Android Back and a page double-tap remain supplementary exits. The three-dot menu retains Full screen, shields, private tabs, downloads, library actions, sharing, printing, Find in page, and Settings. Empty-tab omnibox editing now preserves the native start surface above the resized keyboard instead of exposing a blank white about:blank page. Physical Enter and numpad Enter use both native editor listeners and an Activity-level focused-field fallback, so keyboard/mouse users do not need to click Go. Settings adds Show mobile keyboard; an attached physical keyboard still suppresses the Android IME by default, and the same policy covers Gecko page fields without clearing their focus. Ordinary Web screens use light system-bar surfaces with dark icons and disable Android contrast bands to avoid opaque black notch/navigation strips; page-only mode remains immersive. The established working drawer, private tabs, confirmed stream-based Android Downloads, OAuth/consent compatibility, default ETP, local blocking, performance reductions, and ARM64-only bundled engine remain. The release verifies APK signature, package ID, version, non-debuggable process flag, ARM64-only native code, libxul.so, install-time native extraction, checksum, and a substantial bundled-engine artifact. GitHub compilation/package verification is not physical USB/Bluetooth keyboard, mouse, IME, cutout, or live-site validation; test those on an Android 14+ ARM64 device after installation. The disposable-runner debug certificate is not a durable update identity, so export data and uninstall an older differently signed build if Android rejects the update. SHA256SUMS.txt verifies the APK. App ID: com.minimal.browser."
+          NOTES="Minimal Browser $TAG is a signed, non-debuggable Android release variant with the bundled Mozilla GeckoView ARM64 engine. v1.2.8 repairs mouse-wheel routing for real Android mouse/dock/touchpad stacks: an in-bounds ACTION_SCROLL event is copied into GeckoView surface coordinates and delivered once directly to GeckoView's PanZoomController. This preserves the web element under the pointer, including nested CSS overflow panels such as an open Arena history/sidebar, instead of losing the event to a focused Android shell view. It supports vertical and horizontal axes and has a window-coordinate fallback for older mouse bridges; normal click, right-click, and Back/Forward side-button routing remain intact. v1.2.7's compact full-screen toggle, removed black Web/breadcrumb header and rejected hold gesture, start-panel-visible omnibox editing, physical Enter fallback, Show mobile keyboard preference, light ordinary Web system bars, working drawer, private tabs, stream-based Android Downloads, OAuth/consent compatibility, default ETP, local blocking, and ARM64-only bundled engine remain. The release verifies APK signature, package ID, version, non-debuggable process flag, ARM64-only native code, libxul.so, install-time native extraction, checksum, and a substantial bundled-engine artifact. GitHub compilation/package verification is not physical mouse, dock, touchpad, live-site, IME, cutout, or gesture-navigation validation; test those on an Android 14+ ARM64 device after installation. The disposable-runner debug certificate is not a durable update identity, so export data and uninstall an older differently signed build if Android rejects the update. SHA256SUMS.txt verifies the APK. App ID: com.minimal.browser."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else

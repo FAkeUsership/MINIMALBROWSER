@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.8 — Mouse-wheel routing for nested web panels
+
+- Fixes the reported real-device mouse-wheel failure in long web-app panels such as an open Arena history/sidebar. Some Android mouse/dock/touchpad stacks route generic `ACTION_SCROLL` events to the focused Activity shell instead of the view under the cursor, so GeckoView never receives them.
+- When a pointer-wheel event is inside the visible browser surface, the activity now copies it, converts its coordinates from screen (with a window-coordinate fallback for older bridges) to GeckoView surface space, and forwards it exactly once to `GeckoView.onGenericMotionEvent`. Gecko’s normal wheel pipeline can therefore select the nested CSS overflow element beneath the pointer rather than only the outer page. Vertical and horizontal wheel axes remain intact, and Android’s normal fallback cannot duplicate the event.
+- Mouse click, context-click, keyboard input, ordinary touch scrolling, and de-duplicated Back/Forward side-button navigation are left on their existing paths. This is source/static checked and needs a real Android mouse/dock/touchpad test on the affected site before claiming physical-device confirmation.
+
 ## v1.2.7 — Compact browser chrome and reliable input
 
 - Removes the 53dp black `Web`/breadcrumb/shields header instead of merely hiding it in page-only mode. The browser viewport now begins directly below the compact white Web toolbar, and its useful actions remain reachable from the existing real three-dot drawer (including shields and a working Full screen action).

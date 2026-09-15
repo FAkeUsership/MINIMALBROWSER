@@ -215,7 +215,7 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         out += infoRow(
             R.drawable.ic_back,
             "Desktop-style navigation",
-            "Ctrl+L focuses the address bar; Ctrl+T/W opens or closes a tab; Ctrl+Tab switches tabs; Alt+left/right and mouse side buttons navigate."
+            "Ctrl+L focuses the address bar; Ctrl+T/W opens or closes a tab; Ctrl+Tab switches tabs; Alt+left/right and mouse side buttons navigate. The mouse wheel scrolls the page or the panel under its pointer."
         )
 
         out += group("Android system bars")

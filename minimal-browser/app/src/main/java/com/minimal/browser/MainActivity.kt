@@ -198,8 +198,18 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         return super.dispatchKeyEvent(event)
     }
 
-    /** Preserve scroll/right-click delivery while supporting mouse side buttons. */
+    /**
+     * Android normally routes pointer-wheel events to the view under the cursor,
+     * but some dock/mouse stacks route them to the focused shell view instead.
+     * Send an in-bounds wheel event straight to GeckoView with coordinates made
+     * local to its surface. This preserves a web app's nested overflow target
+     * (for example, an open Arena-style history/sidebar), rather than only
+     * scrolling the outer Android shell or dropping the event.
+     */
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (isPointerScrollEvent(event) && forwardPointerScrollToGecko(event)) {
+            return true
+        }
         if (isMouseEvent(event) && event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS) {
             when (event.actionButton) {
                 MotionEvent.BUTTON_BACK -> {
@@ -371,6 +381,52 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     private fun isMouseEvent(event: MotionEvent): Boolean =
         (event.source and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
+
+    private fun isPointerScrollEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked != MotionEvent.ACTION_SCROLL) return false
+        val source = event.source
+        return (source and InputDevice.SOURCE_CLASS_POINTER) != 0 ||
+            (source and InputDevice.SOURCE_TOUCHPAD) == InputDevice.SOURCE_TOUCHPAD ||
+            (source and InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE
+    }
+
+    /**
+     * Generic motion reaches Activity coordinates on a number of Android mouse
+     * adapters. GeckoView's PanZoomController explicitly requires coordinates
+     * relative to its display surface, so copy and translate rather than sending
+     * the original decor-relative event.
+     */
+    private fun forwardPointerScrollToGecko(event: MotionEvent): Boolean {
+        if (current != Screen.WEB) return false
+        val view = geckoView ?: return false
+        if (!view.isAttachedToWindow || view.visibility != View.VISIBLE || view.width <= 0 || view.height <= 0) {
+            return false
+        }
+
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        var localX = event.rawX - location[0]
+        var localY = event.rawY - location[1]
+        // A few older mouse bridges report raw coordinates in window space.
+        // Prefer true screen coordinates, then fall back only when those place
+        // the pointer outside Gecko's visible surface.
+        if (localX < 0f || localY < 0f || localX >= view.width || localY >= view.height) {
+            view.getLocationInWindow(location)
+            localX = event.x - location[0]
+            localY = event.y - location[1]
+        }
+        if (localX < 0f || localY < 0f || localX >= view.width || localY >= view.height) return false
+
+        val localEvent = MotionEvent.obtain(event)
+        return try {
+            localEvent.offsetLocation(localX - localEvent.x, localY - localEvent.y)
+            // Call GeckoView directly once; returning true prevents Android's
+            // fallback routing from delivering a duplicate wheel event.
+            view.onGenericMotionEvent(localEvent)
+        } finally {
+            localEvent.recycle()
+        }
+    }
 
     private fun isMouseKeyEvent(event: KeyEvent): Boolean =
         (event.source and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE
