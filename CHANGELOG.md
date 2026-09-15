@@ -8,6 +8,7 @@
 - Adds **Settings → Appearance → Show mobile keyboard**. It is on by default for touch use, can be turned off/on explicitly, and physical USB/Bluetooth keyboard detection continues to suppress the Android IME automatically. The same policy is applied to Gecko page fields without clearing their focus.
 - Strengthens Home and omnibox submission for attached keyboards. Both ordinary and numpad Enter now submit on the first hardware key-down or editor action, with a focused native-field fallback in `MainActivity` for OEM editor/IME paths that previously consumed Enter before an `EditText` listener saw it.
 - Makes normal Web system bars white with dark system icons and disables Android Q+ status/navigation contrast enforcement. This avoids opaque black strips around a landscape cutout and beneath a white page while leaving normal touch/system navigation available; page-only mode still hides the bars.
+- Repairs a current GitHub-hosted-runner failure before compilation: `android-actions/setup-android` was inheriting its obsolete `tools` SDK package default, which Google has removed. The workflow explicitly requests `platform-tools` instead, then continues to install API 36/build-tools 36.0.0 itself.
 - These changes are source-reviewed/static-checked and must still be validated on a real Android 14+ ARM64 device for its specific HID, IME, notch, gesture-navigation, and live-site behavior before claiming device confirmation.
 
 ## v1.2.6 — External keyboard and mouse support

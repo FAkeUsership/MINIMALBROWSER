@@ -39,7 +39,12 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
+        # setup-android's inherited default also asks sdkmanager for the retired
+        # `tools` package. Name the one extra package this workflow needs so a
+        # runner cache miss cannot fail before Android compilation begins.
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Install Android API 36
         run: |
