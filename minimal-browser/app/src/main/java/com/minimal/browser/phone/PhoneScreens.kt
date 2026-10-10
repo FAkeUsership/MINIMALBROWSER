@@ -251,7 +251,7 @@ class HomeView(private val activity: PhoneActivity) : ScrollView(activity) {
         overScrollMode = OVER_SCROLL_NEVER
         addView(column)
 
-        column.addView(label(greeting(), 13f, Palette.INK_SOFT, Type.title).apply { letterSpacing = 0.02f })
+        column.addView(context.label(greeting(), 13f, Palette.INK_SOFT, Type.title).apply { letterSpacing = 0.02f })
         column.addView(activity.displayTitle("Where to,\nnext?", 42f).apply {
             setPadding(0, dp(6), 0, dp(20))
         })
@@ -333,7 +333,7 @@ class HomeView(private val activity: PhoneActivity) : ScrollView(activity) {
         addView(View(context).apply {
             background = context.roundRect(99, Palette.ACCENT)
         }, LinearLayout.LayoutParams(dp(10), dp(10)).apply { rightMargin = dp(12) })
-        addView(label("Videos on any page are found for you. When something is ready to save, the red button in the dock lights up.",
+        addView(context.label("Videos on any page are found for you. When something is ready to save, the red button in the dock lights up.",
             13f, Palette.INK_SOFT).apply { setLineSpacing(dp(2).toFloat(), 1f) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     }
@@ -422,7 +422,7 @@ class HomeView(private val activity: PhoneActivity) : ScrollView(activity) {
                 setTextColor(Palette.WHITE)
                 background = context.roundRect(20, tint)
             }, LinearLayout.LayoutParams(dp(64), dp(64)))
-            addView(label(title.ifBlank { host }, 12f, Palette.INK, Type.title).apply {
+            addView(context.label(title.ifBlank { host }, 12f, Palette.INK, Type.title).apply {
                 isSingleLine = true
                 ellipsize = TextUtils.TruncateAt.END
                 gravity = Gravity.CENTER
@@ -440,8 +440,8 @@ class HomeView(private val activity: PhoneActivity) : ScrollView(activity) {
         setPadding(dp(18), dp(16), dp(12), dp(16))
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            addView(label("Pick up where you left off", 16f, Palette.PAPER, Type.title))
-            addView(label("$count ${if (count == 1) "tab" else "tabs"} from your last session", 13f, 0xB3F3F0E8.toInt()).apply {
+            addView(context.label("Pick up where you left off", 16f, Palette.PAPER, Type.title))
+            addView(context.label("$count ${if (count == 1) "tab" else "tabs"} from your last session", 13f, 0xB3F3F0E8.toInt()).apply {
                 setPadding(0, dp(3), 0, 0)
             })
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -575,7 +575,7 @@ class LibraryView(private val activity: PhoneActivity) : FrameLayout(activity) {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(6), dp(40), dp(6), 0)
         addView(activity.displayTitle(title, 28f))
-        addView(label(body, 15f, Palette.INK_SOFT).apply { setPadding(0, dp(10), 0, 0) })
+        addView(context.label(body, 15f, Palette.INK_SOFT).apply { setPadding(0, dp(10), 0, 0) })
     }
 }
 
