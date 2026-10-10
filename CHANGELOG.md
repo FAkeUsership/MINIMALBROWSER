@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.1 — InShot-style media flow
+
+- **Found-media button.** When a page has downloadable media, a floating button shows how many files were found. Tap it to open the list.
+- **Cards instead of rows.** Each file has a thumbnail, quality and format badges, size, and one clear action: Download, a live progress bar with speed, Play when finished, or Try again after a failure.
+- **Downloads tab.** Library → Downloads shows files in progress with cancel and retry, followed by finished files.
+- **Known limits.** No pause or resume yet, no built-in player, and downloads stop if the app is closed.
+
 ## v1.4.0 — Phone-first layout and a real downloader
 
 - **Phone is the default.** A new portrait layout with a floating address capsule, a floating dock (back, forward, download, tabs, menu), and a start page with quick access, a resume card for your last session, and recent history.

@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.4.0)'
+        description: 'Release tag to create or update (for example: v1.4.1)'
         required: true
-        default: 'v1.4.0'
+        default: 'v1.4.1'
         type: string
       publish_release:
         description: 'Publish release assets after verification (disable for a GitHub Actions validation run)'
@@ -90,7 +90,7 @@ jobs:
           unzip -t "$APK" >/dev/null
           "$APKSIGNER" verify --verbose "$APK"
           "$AAPT2" dump badging "$APK" | tee /tmp/minimal-browser-badging.txt
-          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.4\.0'" /tmp/minimal-browser-badging.txt
+          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.4\.1'" /tmp/minimal-browser-badging.txt
           # Assert against the generated APK, rather than source, that it is a
           # non-debuggable release process even though it is debug-key-signed.
           ! grep -Eq '^application-debuggable' /tmp/minimal-browser-badging.txt
@@ -132,7 +132,7 @@ jobs:
             v*) ;;
             *) echo "release_tag must begin with v (received: $TAG)" >&2; exit 1 ;;
           esac
-          NOTES="Minimal Browser $TAG is a signed Android release with the bundled Mozilla GeckoView ARM64 engine. v1.4.0 adds a phone-first layout (the new default) with a floating address bar and dock, a Tablet mode button, auto-detected media with an InShot-style download sheet (quality, size, per-file progress and speed, Download all, and Open on completion), a keyboard fix for phones that reported a hardware keyboard, and fixed orientation: phone is portrait, tablet is landscape, with no auto-rotate. Verify SHA256SUMS.txt. The disposable-runner debug certificate is not a durable update identity."
+          NOTES="Minimal Browser $TAG is a signed Android release with the bundled Mozilla GeckoView ARM64 engine. v1.4.1 reworks the media flow to follow InShot Video Downloader: a floating Download button appears when a page has media, the media sheet shows large cards with quality, size, and one clear action, and the Downloads tab in Library shows live progress, cancel, and retry. Verify SHA256SUMS.txt. The disposable-runner debug certificate is not a durable update identity."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
           else
