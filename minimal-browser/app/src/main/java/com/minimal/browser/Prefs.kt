@@ -26,6 +26,10 @@ object Prefs {
     private const val K_FIRST_RUN = "first_run"
     private const val K_HIDE_STATUS_BAR = "hide_status_bar"
     private const val K_SHOW_MOBILE_KEYBOARD = "show_mobile_keyboard"
+    private const val K_AUTO_ROTATE = "auto_rotate"
+    private const val K_SHOW_DOWNLOAD_BUTTON = "show_download_button"
+    private const val K_MEDIA_MIN_IMAGE_PX = "media_min_image_px"
+    private const val K_MEDIA_MIN_VIDEO_MB = "media_min_video_mb"
 
     lateinit var sp: SharedPreferences
         private set
@@ -69,6 +73,30 @@ object Prefs {
     var showMobileKeyboard: Boolean
         get() = sp.getBoolean(K_SHOW_MOBILE_KEYBOARD, true)
         set(v) = sp.edit().putBoolean(K_SHOW_MOBILE_KEYBOARD, v).apply()
+
+    /**
+     * true  = the screen follows the device sensor in both portrait and landscape.
+     * false = the screen stays locked to landscape (the original behaviour).
+     */
+    var autoRotate: Boolean
+        get() = sp.getBoolean(K_AUTO_ROTATE, true)
+        set(v) = sp.edit().putBoolean(K_AUTO_ROTATE, v).apply()
+
+    /* ---- Media downloader ---- */
+    /** Shows the media (images/videos) download button in the Web toolbar. */
+    var showDownloadButton: Boolean
+        get() = sp.getBoolean(K_SHOW_DOWNLOAD_BUTTON, false)
+        set(v) = sp.edit().putBoolean(K_SHOW_DOWNLOAD_BUTTON, v).apply()
+
+    /** Images whose shorter side is below this many pixels are hidden. 0 = no limit. */
+    var mediaMinImagePx: Int
+        get() = sp.getInt(K_MEDIA_MIN_IMAGE_PX, 300)
+        set(v) = sp.edit().putInt(K_MEDIA_MIN_IMAGE_PX, v.coerceAtLeast(0)).apply()
+
+    /** Videos smaller than this many megabytes are hidden. 0 = no limit. */
+    var mediaMinVideoMb: Int
+        get() = sp.getInt(K_MEDIA_MIN_VIDEO_MB, 1)
+        set(v) = sp.edit().putInt(K_MEDIA_MIN_VIDEO_MB, v.coerceAtLeast(0)).apply()
 
     /** Page zoom default, 80..140 — matches the HTML range slider. */
     var textSizePercent: Int

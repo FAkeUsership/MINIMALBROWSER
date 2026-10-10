@@ -34,7 +34,8 @@ object Backup {
                 root.put("bookmarks", bookmarks)
 
                 val history = JSONArray()
-                db.history(500).forEach {
+                // Export the full history. A fixed cap silently dropped older entries.
+                db.history(Int.MAX_VALUE).forEach {
                     history.put(JSONObject().apply {
                         put("url", it.url)
                         put("title", it.title)

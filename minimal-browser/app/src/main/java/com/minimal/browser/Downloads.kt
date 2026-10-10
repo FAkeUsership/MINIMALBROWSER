@@ -14,7 +14,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
-import java.net.URLDecoder
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -149,12 +150,70 @@ object Downloads {
             dispatch { listener.onFailed(request, "Could not create a file in Downloads") }
             return false
         }
+        return launchTransfer(appContext, request, target, listener) { body }
+    }
+
+    /**
+     * Download a media file directly by URL, used by the page media downloader.
+     * There is no GeckoView response to authorize here, so the page URL is sent
+     * as Referer, which many image and video hosts require.
+     * @return false when the destination cannot be created.
+     */
+    fun startUrl(
+        context: Context,
+        url: String,
+        fileName: String,
+        mimeType: String,
+        referer: String,
+        userAgent: String,
+        listener: Listener
+    ): Boolean {
+        val request = Request(
+            fileName = sanitize(fileName),
+            sourceUrl = url,
+            mimeType = mimeType,
+            expectedBytes = -1L,
+            requestExternalApp = false
+        )
+        val appContext = context.applicationContext
+        val target = createTarget(appContext, request.fileName, request.mimeType) ?: run {
+            dispatch { listener.onFailed(request, "Could not create a file in Downloads") }
+            return false
+        }
+        return launchTransfer(appContext, request, target, listener) {
+            val connection = URL(url).openConnection() as HttpURLConnection
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 30_000
+            connection.instanceFollowRedirects = true
+            connection.setRequestProperty("User-Agent", userAgent)
+            if (referer.isNotBlank()) connection.setRequestProperty("Referer", referer)
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                connection.disconnect()
+                throw IOException("The server replied HTTP $code")
+            }
+            connection.inputStream
+        }
+    }
+
+    /**
+     * Shared copy pipeline for GeckoView streams and direct URL downloads. The
+     * [openBody] lambda runs on the download thread, so network I/O never blocks UI.
+     */
+    private fun launchTransfer(
+        appContext: Context,
+        request: Request,
+        target: Target,
+        listener: Listener,
+        openBody: () -> java.io.InputStream
+    ): Boolean {
         val transfer = Transfer(request)
         transfers[request.id] = transfer
         dispatch { listener.onStarted(request) }
 
         executor.execute {
             try {
+                val body = openBody()
                 val copied = copyResponse(body, target.output, transfer, listener)
                 publishTarget(appContext, target)
                 val completed = CompletedDownload(
@@ -167,6 +226,9 @@ object Downloads {
                 Log.i(TAG, "saved ${request.fileName} ($copied bytes)")
             } catch (error: Throwable) {
                 transfers.remove(request.id)
+                // Close the destination first. Deleting a file that is still open
+                // leaks its descriptor and can leave an empty file behind.
+                runCatching { target.output.close() }
                 discardTarget(appContext, target)
                 Log.w(TAG, "download failed for ${request.sourceUrl}", error)
                 val detail = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
@@ -277,13 +339,17 @@ object Downloads {
 
     private fun fileNameFrom(uri: String, headers: Map<String, String>): String {
         headers["Content-Disposition"]?.let { disposition ->
-            val match = Regex("filename\\*?=(?:UTF-8'')?\\\"?([^\\\";]+)\\\"?", RegexOption.IGNORE_CASE)
+            // RFC 5987 `filename*=UTF-8''name%20here.pdf` is percent-encoded.
+            val encoded = Regex("filename\\*=[^']*'[^']*'([^;]+)", RegexOption.IGNORE_CASE)
                 .find(disposition)
-            if (match != null) {
-                val encoded = match.groupValues[1]
-                val decoded = runCatching { URLDecoder.decode(encoded, "UTF-8") }.getOrDefault(encoded)
-                return sanitize(decoded)
+            if (encoded != null) {
+                val raw = encoded.groupValues[1].trim().trim('"')
+                // Uri.decode keeps '+' literal. URLDecoder would turn it into a space.
+                return sanitize(runCatching { Uri.decode(raw) }.getOrDefault(raw))
             }
+            // A plain `filename="a+b.pdf"` is not percent-encoded and must not be decoded.
+            val plain = Regex("filename=\"?([^\";]+)\"?", RegexOption.IGNORE_CASE).find(disposition)
+            if (plain != null) return sanitize(plain.groupValues[1])
         }
         return sanitize(Uri.parse(uri).lastPathSegment ?: "download-${System.currentTimeMillis()}")
     }

@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.2.9 — Auto-rotate, media downloader, and fixes
+
+- **Auto-rotate.** Settings → Appearance → *Auto-rotate* lets the browser follow the device in portrait and landscape. Turn it off to lock landscape again. The manifest and `MainActivity.applyOrientation()` now both use the same choice.
+- **Media download button (optional).** Settings → Downloads → *Show media download button* adds a download icon to the Web toolbar. It scans the current page for images (`img`, lazy-load attributes, `srcset`/`picture`, Open Graph/Twitter cards, CSS backgrounds, and direct links) and videos (`video`/`source`, Open Graph, direct links). You tick the items you want and download them. Each file is saved unchanged, through the same Downloads list.
+- **Quality and size controls.** Images are sorted largest first, and the largest `srcset` variant is used. Videos show their resolution when the site labels it (`label`/`res` attributes or a `1080p`-style URL). Minimum image size (shorter side) and minimum video size can be set in Settings, and hidden items are counted in the scan summary.
+- **Limits.** Media that a page only creates with JavaScript after it loads is not found. HLS (`.m3u8`) and DASH (`.mpd`) streams are counted but not downloaded.
+- **Fix:** a `Content-Disposition` filename without RFC 5987 encoding (for example `filename="a+b.pdf"`) was run through a percent-decoder, which turned `+` into a space. Plain names are now kept exactly as the server sent them.
+- **Fix:** a failed download now closes its destination file before deleting it, so no open descriptor or empty leftover file is kept.
+- **Fix:** Settings → Sync & backup → Export was capped at the 500 most recent history entries, so older history was silently left out. It now exports all history.
+- Adds the Jsoup HTML parser dependency (`org.jsoup:jsoup:1.17.2`) for the media scanner. It only reads HTML and never runs page scripts.
+- Source-level changes only; they still need a GitHub Actions build and a test on a real Android device.
+
 ## v1.2.8 — Mouse-wheel routing for nested web panels
 
 - Fixes the reported real-device mouse-wheel failure in long web-app panels such as an open Arena history/sidebar. Some Android mouse/dock/touchpad stacks route generic `ACTION_SCROLL` events to the focused Activity shell instead of the view under the cursor, so GeckoView never receives them.

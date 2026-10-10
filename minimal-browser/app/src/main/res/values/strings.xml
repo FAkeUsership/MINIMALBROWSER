@@ -43,6 +43,7 @@
     <string name="cd_reload">Reload</string>
     <string name="cd_enter_fullscreen">Enter full screen</string>
     <string name="cd_exit_fullscreen">Exit full screen</string>
+    <string name="cd_media_download">Download media on this page</string>
     <string name="cd_menu">Menu</string>
     <string name="cd_close">Close</string>
     <string name="cd_tabs">Tabs</string>

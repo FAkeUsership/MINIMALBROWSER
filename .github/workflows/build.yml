@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create or update (for example: v1.2.8)'
+        description: 'Release tag to create or update (for example: v1.2.9)'
         required: true
-        default: 'v1.2.8'
+        default: 'v1.2.9'
         type: string
       publish_release:
         description: 'Publish release assets after verification (disable for a GitHub Actions validation run)'
@@ -90,7 +90,7 @@ jobs:
           unzip -t "$APK" >/dev/null
           "$APKSIGNER" verify --verbose "$APK"
           "$AAPT2" dump badging "$APK" | tee /tmp/minimal-browser-badging.txt
-          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.8'" /tmp/minimal-browser-badging.txt
+          grep -Eq "^package: name='com\.minimal\.browser'.*versionName='1\.2\.9'" /tmp/minimal-browser-badging.txt
           # Assert against the generated APK, rather than source, that it is a
           # non-debuggable release process even though it is debug-key-signed.
           ! grep -Eq '^application-debuggable' /tmp/minimal-browser-badging.txt

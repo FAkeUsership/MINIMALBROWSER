@@ -30,6 +30,7 @@ import com.minimal.browser.ui.AppToast
 import com.minimal.browser.ui.HomeScreen
 import com.minimal.browser.ui.Ink
 import com.minimal.browser.ui.ListScreen
+import com.minimal.browser.ui.MediaDownloadDialog
 import com.minimal.browser.ui.MenuDrawer
 import com.minimal.browser.ui.RailView
 import com.minimal.browser.ui.SettingsScreen
@@ -125,8 +126,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         // boundary. Home, Tabs, and Settings never start native browser code.
         TabManager.host = this
 
-        // Landscape is also locked in the manifest (android:screenOrientation).
-        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        applyOrientation()
         // Do not force the display to stay on forever: web video can manage its
         // own wake behavior, while idle browsing should follow device timeout.
 
@@ -552,6 +552,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         webScreen.onTabs = { leaveFullScreenIfNeeded(); show(Screen.TABS) }
         webScreen.onMenu = { drawer.toggle() }
         webScreen.onToggleFullScreen = { togglePageOnly() }
+        webScreen.onMediaDownload = { openMediaDownloader() }
         // In page-only mode the content is visually clean. A double tap anywhere
         // on the page restores normal browser controls.
         webScreen.onPageDoubleTap = { if (fullScreen) exitPageOnly() }
@@ -591,6 +592,8 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     private fun show(screen: Screen) {
         if (screen != Screen.LIST) previousScreen = current
         current = screen
+        // The media button is a Settings choice, so refresh it whenever Web comes forward.
+        if (screen == Screen.WEB) webScreen.refreshMediaButton()
 
         // A Gecko compositor owns a surface only while the Web screen is visible.
         // Release first, while the view is still attached, then remove it from UI.
@@ -1120,6 +1123,56 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
             Log.w("MinimalBrowser", "could not show download confirmation", error)
             discardResponse()
             toast.say("Could not show the download confirmation")
+        }
+    }
+
+    /**
+     * Auto-rotate follows the device sensor in portrait and landscape. When it is
+     * off, the screen stays locked to landscape, as it was in earlier versions.
+     */
+    fun applyOrientation() {
+        requestedOrientation = if (Prefs.autoRotate) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+    }
+
+    override fun onOrientationChanged() = applyOrientation()
+
+    /**
+     * Opens the media downloader for the current web page. Each ticked file is
+     * saved through the same Downloads list as ordinary downloads.
+     */
+    private fun openMediaDownloader() {
+        val tab = TabManager.active
+        val pageUrl = tab?.url.orEmpty()
+        if (!pageUrl.startsWith("http://") && !pageUrl.startsWith("https://")) {
+            toast.say("Open a web page first, then download its media")
+            return
+        }
+        if (isFinishing || isDestroyed) return
+        val privateTab = tab?.private == true
+        try {
+            MediaDownloadDialog(this, pageUrl) { items ->
+                var started = 0
+                items.forEach { item ->
+                    val ok = Downloads.startUrl(
+                        applicationContext,
+                        item.url,
+                        item.fileName,
+                        item.mimeType,
+                        pageUrl,
+                        MediaScanner.USER_AGENT,
+                        downloadListener(privateTab)
+                    )
+                    if (ok) started++
+                }
+                toast.say("Downloading $started of ${items.size} file(s)")
+            }.show()
+        } catch (error: Throwable) {
+            Log.w("MinimalBrowser", "could not open the media downloader", error)
+            toast.say("Could not open the media downloader")
         }
     }
 

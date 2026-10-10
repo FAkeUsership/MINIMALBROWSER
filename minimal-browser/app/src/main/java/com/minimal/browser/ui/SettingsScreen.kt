@@ -42,6 +42,8 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         fun onShowAbout()
         fun onStatusBarVisibilityChanged()
         fun onMobileKeyboardVisibilityChanged()
+        /** Called after the auto-rotate switch changes; the host applies the new lock. */
+        fun onOrientationChanged() {}
         fun toast(message: String)
     }
 
@@ -184,6 +186,18 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
 
     private fun appearancePanel(): List<View> {
         val out = ArrayList<View>()
+        out += group("Screen rotation")
+        out += switchRow(
+            R.drawable.ic_fullscreen,
+            "Auto-rotate",
+            "Follow the device in both portrait and landscape. Turn this off to keep the browser locked to landscape.",
+            Prefs.autoRotate
+        ) { on ->
+            Prefs.autoRotate = on
+            callback?.onOrientationChanged()
+            callback?.toast(if (on) "Auto-rotate on" else "Locked to landscape")
+        }
+
         out += group("Full screen")
         out += infoRow(
             R.drawable.ic_fullscreen,
@@ -358,6 +372,42 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         out += infoRow(
             R.drawable.ic_file, "Where files go",
             "Android’s Downloads service saves them so they appear in your Files app."
+        )
+
+        out += group("Media downloader")
+        out += switchRow(
+            R.drawable.ic_download,
+            "Show media download button",
+            "Adds a download button to the Web toolbar. It scans the current page for images and videos, and you tick the ones to save.",
+            Prefs.showDownloadButton
+        ) { on ->
+            Prefs.showDownloadButton = on
+            callback?.toast(if (on) "Media download button shown" else "Media download button hidden")
+        }
+        val imageSizes = listOf(0, 150, 300, 600, 1000)
+        out += spinnerRow(
+            R.drawable.ic_eye,
+            "Minimum image size",
+            "Hide images whose shorter side is smaller than this.",
+            imageSizes.map { if (it == 0) "No limit" else "$it px" },
+            imageSizes.indexOf(Prefs.mediaMinImagePx).coerceAtLeast(0)
+        ) { index ->
+            Prefs.mediaMinImagePx = imageSizes[index]
+        }
+        val videoSizes = listOf(0, 1, 5, 20, 50)
+        out += spinnerRow(
+            R.drawable.ic_file,
+            "Minimum video size",
+            "Hide videos smaller than this file size.",
+            videoSizes.map { if (it == 0) "No limit" else "$it MB" },
+            videoSizes.indexOf(Prefs.mediaMinVideoMb).coerceAtLeast(0)
+        ) { index ->
+            Prefs.mediaMinVideoMb = videoSizes[index]
+        }
+        out += infoRow(
+            R.drawable.ic_info,
+            "Quality",
+            "Images are saved at the largest size the page offers. Videos show their resolution when the site labels it. Each file is saved unchanged, with no re-encoding."
         )
         return out
     }

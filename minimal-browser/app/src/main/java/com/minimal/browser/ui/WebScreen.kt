@@ -48,6 +48,8 @@ class WebScreen(context: Context) : LinearLayout(context) {
     /** Used only while page-only mode is active. */
     var onPageDoubleTap: (() -> Unit)? = null
     var onAddressFocused: (() -> Unit)? = null
+    /** Opens the media downloader for the current page (shown only when enabled in Settings). */
+    var onMediaDownload: (() -> Unit)? = null
 
     /* ---- views ---- */
     val webBar: LinearLayout
@@ -64,6 +66,7 @@ class WebScreen(context: Context) : LinearLayout(context) {
     private var attachedGeckoView: GeckoView? = null
     val blockedBanner: TextView
     private val pageOnlyToggle: ImageView
+    private val mediaButton: ImageView
 
     private val btnBack: ImageView
     private val btnForward: ImageView
@@ -174,6 +177,10 @@ class WebScreen(context: Context) : LinearLayout(context) {
             leftMargin = context.dp(8)
             rightMargin = context.dp(8)
         })
+
+        mediaButton = webButton(R.drawable.ic_download, R.string.cd_media_download) { onMediaDownload?.invoke() }
+        webBar.addView(mediaButton, barButtonParams())
+        refreshMediaButton()
 
         webBar.addView(webButton(R.drawable.ic_tabs, R.string.cd_tabs) { onTabs?.invoke() }, barButtonParams())
         webBar.addView(webButton(R.drawable.ic_menu, R.string.cd_menu) { onMenu?.invoke() }, barButtonParams())
@@ -516,6 +523,11 @@ class WebScreen(context: Context) : LinearLayout(context) {
             cancelEditing()
         }
         updateStartPanel()
+    }
+
+    /** Shows or hides the media download button to match the Settings switch. */
+    fun refreshMediaButton() {
+        mediaButton.visibility = if (Prefs.showDownloadButton) VISIBLE else GONE
     }
 
     /** Places only the active bundled-engine GeckoView under browser overlays. */

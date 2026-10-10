@@ -14,8 +14,8 @@ android {
         // Android 8.0+; the bundled Mozilla engine itself is packaged in this APK.
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.2.8"
+        versionCode = 16
+        versionName = "1.2.9"
 
         // The requested release is intentionally ARM64-only. This makes the
         // APK substantial because it carries Gecko's native ARM64 libraries,
@@ -88,6 +88,9 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+
+    // HTML parser for the media downloader. It only reads the page; it never runs scripts.
+    implementation("org.jsoup:jsoup:1.17.2")
 
     // Mozilla's release-channel GeckoView. Native ARM64 engine code is bundled
     // by this dependency and restricted above to arm64-v8a in the APK.
