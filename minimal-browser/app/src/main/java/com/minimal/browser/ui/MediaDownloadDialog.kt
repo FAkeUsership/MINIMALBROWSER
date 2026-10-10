@@ -537,18 +537,19 @@ class MediaDownloadDialog(
     /*  list                                                               */
     /* ------------------------------------------------------------------ */
 
-    private inner class Adapter : RecyclerView.Adapter<Adapter.Holder>() {
+    /** One list row. Kept outside [Adapter] because Kotlin forbids nested classes inside inner classes. */
+    private class Holder(
+        val row: LinearLayout,
+        val thumb: ImageView,
+        val title: TextView,
+        val detail: TextView,
+        val check: CheckBox,
+        val bar: ProgressBar,
+        val cancel: ImageView,
+        val done: CheckMarkView
+    ) : RecyclerView.ViewHolder(row)
 
-        class Holder(
-            val row: LinearLayout,
-            val thumb: ImageView,
-            val title: TextView,
-            val detail: TextView,
-            val check: CheckBox,
-            val bar: ProgressBar,
-            val cancel: ImageView,
-            val done: CheckMarkView
-        ) : RecyclerView.ViewHolder(row)
+    private inner class Adapter : RecyclerView.Adapter<Holder>() {
 
         override fun getItemCount(): Int = visible.size
 
