@@ -480,6 +480,8 @@ class LibraryView(private val activity: PhoneActivity) : FrameLayout(activity) {
     private var token = 0
 
     init {
+        // Keep the Downloads tab live while a download runs.
+        activity.addJobListener { if (section == 2 && visibility == View.VISIBLE) render() }
         val column = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         column.addView(activity.screenHeader("Library"), LinearLayout.LayoutParams(-1, -2))
         column.addView(segmented, LinearLayout.LayoutParams(-1, -2).apply {
@@ -506,6 +508,8 @@ class LibraryView(private val activity: PhoneActivity) : FrameLayout(activity) {
         val my = ++token
         val ctx = activity.applicationContext
         val current = section
+        // Live jobs come from memory, so they appear instantly and never wait on the database.
+        val active = if (current == 2) activity.jobs.values.filter { it.state != PhoneActivity.Job.State.DONE } else emptyList()
         activity.runAsync(
             work = {
                 val db = DataStore.get(ctx)
@@ -516,12 +520,64 @@ class LibraryView(private val activity: PhoneActivity) : FrameLayout(activity) {
                 }
             },
             fallback = emptyList<Any>()
-        ) { items -> if (my == token) bind(current, items) }
+        ) { items -> if (my == token) bind(current, items, active) }
     }
 
-    private fun bind(section: Int, items: List<Any>) {
+    private fun sectionHead(text: String): View = context.sectionLabel(text)
+
+    /** A live download: name, state line, progress bar while running, and cancel or retry. */
+    private fun jobCard(job: PhoneActivity.Job): View {
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(14))
+        }
+        body.addView(context.label(job.item.fileName, 15f, Palette.INK, Type.title).apply {
+            isSingleLine = true
+            ellipsize = TextUtils.TruncateAt.MIDDLE
+        })
+        val running = job.state == PhoneActivity.Job.State.RUNNING
+        val line = when {
+            running -> "${(job.fraction * 100).toInt()}%  ·  ${if (job.bytesPerSecond > 0) Fmt.bytes(job.bytesPerSecond) + "/s" else "starting"}"
+            else -> job.reason.ifBlank { "Download failed" }
+        }
+        body.addView(context.label(line, 13f, if (running) Palette.INK_SOFT else Palette.DANGER).apply {
+            setPadding(0, dp(4), 0, dp(12))
+        })
+        if (running) {
+            body.addView(BarView(context).apply { setFraction(job.fraction) },
+                LinearLayout.LayoutParams(-1, dp(8)))
+        }
+        val actionRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(10), 0, 0)
+        }
+        if (running) {
+            actionRow.addView(actionText("Cancel", Palette.INK_SOFT) { activity.cancelMedia(job.item.url) })
+        } else {
+            actionRow.addView(actionText("Try again", Palette.ACCENT) { activity.downloadMedia(job.item) })
+        }
+        body.addView(actionRow, LinearLayout.LayoutParams(-1, -2))
+        return activity.card(listOf(body))
+    }
+
+    private fun actionText(text: String, color: Int, onTap: () -> Unit): TextView =
+        context.label(text, 14f, color, Type.title).apply {
+            setPadding(dp(14), dp(6), dp(4), dp(6))
+            springPress(0.95f)
+            setOnClickListener { onTap() }
+        }
+
+    private fun bind(section: Int, items: List<Any>, active: List<PhoneActivity.Job>) {
         list.removeAllViews()
-        if (items.isEmpty()) {
+        if (section == 2 && active.isNotEmpty()) {
+            list.addView(sectionHead("In progress"))
+            active.forEach { job ->
+                list.addView(jobCard(job), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+            }
+            if (items.isNotEmpty()) list.addView(sectionHead("Finished"))
+        }
+        if (items.isEmpty() && (section != 2 || active.isEmpty())) {
             list.addView(emptyState(
                 when (section) {
                     0 -> "No history yet"
@@ -559,7 +615,7 @@ class LibraryView(private val activity: PhoneActivity) : FrameLayout(activity) {
                 else -> View(context)
             }
         }
-        list.addView(activity.card(rows), LinearLayout.LayoutParams(-1, -2))
+        if (rows.isNotEmpty()) list.addView(activity.card(rows), LinearLayout.LayoutParams(-1, -2))
         list.enter()
     }
 

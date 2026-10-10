@@ -105,9 +105,16 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
     var detectedMedia: List<MediaScanner.Item> = emptyList()
         private set
     /** Called when a job changes so an open media sheet can redraw its row. */
-    var onJobChanged: ((String) -> Unit)? = null
-    /** Called when the detected list changes. */
-    var onDetectedChanged: (() -> Unit)? = null
+    private val jobListeners = ArrayList<(String) -> Unit>()
+    fun addJobListener(listener: (String) -> Unit) { jobListeners += listener }
+    fun removeJobListener(listener: (String) -> Unit) { jobListeners.remove(listener) }
+    fun activeJobCount(): Int = jobs.values.count { it.state == Job.State.RUNNING }
+
+    /** Every download change goes through here, so the dock and open sheets stay in step. */
+    fun notifyJob(url: String) {
+        if (::mediaButton.isInitialized) mediaButton.setCount(activeJobCount())
+        jobListeners.toList().forEach { it(url) }
+    }
 
     lateinit var toast: AppToast
     lateinit var sheet: SheetHost
@@ -132,6 +139,7 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
     private lateinit var backButton: DockButton
     private lateinit var forwardButton: DockButton
     private lateinit var mediaButton: DockButton
+    private lateinit var foundPill: TextView
     private lateinit var tabsButton: DockButton
     private lateinit var menuButton: DockButton
 
@@ -245,6 +253,11 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
         dockWrap = buildDock()
         root.addView(dockWrap, FrameLayout.LayoutParams(MATCH, dp(70), Gravity.BOTTOM))
 
+        foundPill = buildFoundPill()
+        root.addView(foundPill, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(50), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        ))
+
         toast = AppToast(this)
         root.addView(toast, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -343,13 +356,13 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
         }
         backButton = DockButton(this, R.drawable.ic_back, "Back")
         forwardButton = DockButton(this, R.drawable.ic_fwd, "Forward")
-        mediaButton = DockButton(this, R.drawable.ic_download, "Download media", accent = true)
+        mediaButton = DockButton(this, R.drawable.ic_download, "Downloads")
         tabsButton = DockButton(this, R.drawable.ic_tabs, "Tabs")
         menuButton = DockButton(this, R.drawable.ic_menu, "Menu")
 
         backButton.setOnClickListener { if (current == Screen.WEB) TabManager.goBack() }
         forwardButton.setOnClickListener { if (current == Screen.WEB) TabManager.goForward() }
-        mediaButton.setOnClickListener { showMedia() }
+        mediaButton.setOnClickListener { showLibrary(2) }
         tabsButton.setOnClickListener { showTabs() }
         menuButton.setOnClickListener { showMenu() }
 
@@ -369,6 +382,7 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
             bottomMargin = 0
         }
         (dockWrap.layoutParams as FrameLayout.LayoutParams).bottomMargin = insetBottom + dp(10)
+        (foundPill.layoutParams as FrameLayout.LayoutParams).bottomMargin = insetBottom + dp(92)
         screens.setPadding(0, insetTop, 0, insetBottom + dp(92))
         (toast.layoutParams as FrameLayout.LayoutParams).bottomMargin = insetBottom + dp(96)
         topBar.requestLayout()
@@ -416,6 +430,42 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
         }
         applyChromeVisibility()
         refreshChrome()
+        updateFoundPill()
+    }
+
+    /** The floating "Download N files found" pill, shown over a web page that has media. */
+    private fun buildFoundPill(): TextView = TextView(this).apply {
+        gravity = Gravity.CENTER
+        textSize = 15f
+        typeface = Type.display
+        letterSpacing = 0.01f
+        setTextColor(Palette.WHITE)
+        background = roundRect(99, Palette.ACCENT)
+        setPadding(dp(22), 0, dp(22), 0)
+        elevation = dp(8).toFloat()
+        visibility = View.GONE
+        springPress(0.95f)
+        setOnClickListener { showMedia() }
+    }
+
+    private fun updateFoundPill() {
+        if (!::foundPill.isInitialized) return
+        val count = detectedMedia.size
+        val wanted = count > 0 && current == Screen.WEB && !fullscreenVideo && !sheet.isShowing
+        foundPill.text = "Download  ·  $count ${if (count == 1) "file" else "files"} found"
+        foundPill.animate().cancel()
+        if (wanted) {
+            if (foundPill.visibility != View.VISIBLE) {
+                foundPill.visibility = View.VISIBLE
+                foundPill.alpha = 0f
+                foundPill.translationY = dp(28).toFloat()
+            }
+            foundPill.animate().alpha(1f).translationY(0f).setDuration(380)
+                .setInterpolator(OvershootInterpolator(1.6f)).start()
+        } else if (foundPill.visibility == View.VISIBLE) {
+            foundPill.animate().alpha(0f).translationY(dp(20).toFloat()).setDuration(200)
+                .withEndAction { foundPill.visibility = View.GONE }.start()
+        }
     }
 
     private fun applyChromeVisibility() {
@@ -540,8 +590,7 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
         backButton.setEnabledState(tab?.canGoBack == true)
         forwardButton.setEnabledState(tab?.canGoForward == true)
         tabsButton.setCount(TabManager.tabs.size)
-        mediaButton.setCount(detectedMedia.size)
-        mediaButton.setEnabledState(url.startsWith("http"))
+        mediaButton.setCount(activeJobCount())
     }
 
     private fun updateProgress(percent: Int) {
@@ -577,7 +626,12 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
             toast.say("Open a web page first, then look for media")
             return
         }
-        sheet.show(MediaSheet(this, url), 0.9f) { onJobChanged = null }
+        val media = MediaSheet(this, url)
+        sheet.show(media, 0.92f) {
+            removeJobListener(media.jobListener)
+            updateFoundPill()
+        }
+        updateFoundPill()
     }
 
     /* ================================================================== */
@@ -601,8 +655,7 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
 
     private fun setDetected(items: List<MediaScanner.Item>) {
         detectedMedia = items
-        mediaButton.setCount(items.size)
-        onDetectedChanged?.invoke()
+        updateFoundPill()
     }
 
     fun jobFor(url: String): Job? = jobs[url]
@@ -621,7 +674,7 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
             job.state = Job.State.FAILED
             job.reason = "Could not create a file in Downloads"
         }
-        onJobChanged?.invoke(item.url)
+        notifyJob(item.url)
     }
 
     fun cancelMedia(url: String) {
@@ -638,14 +691,14 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
                     it.startedAt = System.currentTimeMillis()
                 }
                 if (job == null) toast.say("Downloading ${request.fileName}")
-                job?.let { onJobChanged?.invoke(it.item.url) }
+                job?.let { notifyJob(it.item.url) }
             }
 
             override fun onProgress(request: Downloads.Request, receivedBytes: Long, expectedBytes: Long) {
                 val j = job ?: return
                 j.received = receivedBytes
                 j.expected = expectedBytes
-                onJobChanged?.invoke(j.item.url)
+                notifyJob(j.item.url)
             }
 
             override fun onCompleted(download: Downloads.CompletedDownload) {
@@ -656,7 +709,7 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
                     j.expected = download.bytes
                     j.localUri = download.localUri.toString()
                     j.mime = download.request.mimeType
-                    onJobChanged?.invoke(j.item.url)
+                    notifyJob(j.item.url)
                 }
                 toast.say("Saved ${download.request.fileName}")
                 if (!privateDownload) {
@@ -679,7 +732,7 @@ class PhoneActivity : AppCompatActivity(), TabManager.Host {
                 if (j != null) {
                     j.state = Job.State.FAILED
                     j.reason = reason
-                    onJobChanged?.invoke(j.item.url)
+                    notifyJob(j.item.url)
                 } else if (!reason.equals(Downloads.CANCELLED_REASON, ignoreCase = true)) {
                     toast.say(reason)
                 }

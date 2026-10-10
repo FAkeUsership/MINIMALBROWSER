@@ -1,11 +1,13 @@
 package com.minimal.browser.phone
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
@@ -25,18 +27,86 @@ import com.minimal.browser.Fmt
 import com.minimal.browser.MediaScanner
 import com.minimal.browser.Prefs
 import com.minimal.browser.R
-import com.minimal.browser.ui.CheckMarkView
 import com.minimal.browser.ui.RadarView
 import com.minimal.browser.ui.dp
 import com.minimal.browser.ui.icon
 import com.minimal.browser.ui.roundRect
 
+/** Thin rounded progress bar. Animates smoothly between values. */
+class BarView(context: Context) : View(context) {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rect = RectF()
+    private var value = 0f
+    private var animator: ValueAnimator? = null
+
+    fun setFraction(fraction: Float) {
+        val target = fraction.coerceIn(0f, 1f)
+        animator?.cancel()
+        animator = ValueAnimator.ofFloat(value, target).apply {
+            duration = 280
+            addUpdateListener {
+                value = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val h = height.toFloat()
+        val r = h / 2f
+        paint.color = Palette.PAPER_DEEP
+        rect.set(0f, 0f, width.toFloat(), h)
+        canvas.drawRoundRect(rect, r, r, paint)
+        if (value > 0f) {
+            paint.color = Palette.ACCENT
+            rect.set(0f, 0f, maxOf(h, width * value), h)
+            canvas.drawRoundRect(rect, r, r, paint)
+        }
+    }
+}
+
+/** A small custom play triangle. Drawn so it stays crisp at any size. */
+class PlayGlyph(context: Context) : View(context) {
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Palette.INK
+        style = Paint.Style.FILL
+    }
+    private val path = Path()
+
+    var tint: Int
+        get() = fill.color
+        set(value) { fill.color = value }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        path.reset()
+        path.moveTo(w * 0.36f, h * 0.26f)
+        path.lineTo(w * 0.76f, h * 0.5f)
+        path.lineTo(w * 0.36f, h * 0.74f)
+        path.close()
+        canvas.drawPath(path, fill)
+    }
+}
+
+/** Callbacks a card can fire. */
+class RowActions(
+    val download: () -> Unit,
+    val cancel: () -> Unit,
+    val open: (PhoneActivity.Job) -> Unit
+)
+
 /**
- * Media sheet, modelled on the InShot-style video downloader: the page is scanned,
- * every file is listed with its type, quality, and size, and each one has its own
- * download control. Progress rings, speed, and the finished state update in place.
+ * Media sheet, in the style of InShot's downloader: the page is scanned and each
+ * file appears as a large card with a thumbnail, its quality and format, and one
+ * clear action. Downloading turns the card into a progress bar with speed; a
+ * finished card offers Play.
  */
 class MediaSheet(private val activity: PhoneActivity, private val pageUrl: String) : FrameLayout(activity) {
+
+    /** Registered with the activity so cards redraw when a download changes. */
+    val jobListener: (String) -> Unit = { url -> rowChanged(url) }
 
     private var all: List<MediaScanner.Item> = activity.detectedMedia.toList()
     private var visible: List<MediaScanner.Item> = emptyList()
@@ -61,10 +131,10 @@ class MediaSheet(private val activity: PhoneActivity, private val pageUrl: Strin
             setPadding(activity.dp(22), activity.dp(22), activity.dp(18), 0)
         }
         val titles = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        titles.addView(activity.displayTitle("Media", 36f))
+        titles.addView(activity.displayTitle("Found here", 36f))
         titles.addView(subtitle.apply { setPadding(0, activity.dp(4), 0, 0) })
         header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(radar, LinearLayout.LayoutParams(activity.dp(30), activity.dp(30)).apply { rightMargin = activity.dp(8) })
+        header.addView(radar, LinearLayout.LayoutParams(activity.dp(28), activity.dp(28)).apply { rightMargin = activity.dp(8) })
         header.addView(activity.iconChip(R.drawable.ic_x, "Close") { activity.sheet.dismiss() },
             LinearLayout.LayoutParams(activity.dp(44), activity.dp(44)))
         column.addView(header, LinearLayout.LayoutParams(-1, -2))
@@ -78,45 +148,40 @@ class MediaSheet(private val activity: PhoneActivity, private val pageUrl: Strin
         list.adapter = adapter
         list.clipToPadding = false
         list.overScrollMode = OVER_SCROLL_NEVER
-        list.setPadding(activity.dp(18), activity.dp(14), activity.dp(18), activity.dp(110))
+        list.setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(110))
         list.layoutAnimation = LayoutAnimationController(AnimationSet(true).apply {
             addAnimation(AlphaAnimation(0f, 1f))
             addAnimation(TranslateAnimation(0f, 0f, activity.dp(22).toFloat(), 0f))
             duration = 340
-        }, 0.12f)
+        }, 0.1f)
         content.addView(list, FrameLayout.LayoutParams(-1, -1))
 
         emptyState.setPadding(activity.dp(24), activity.dp(40), activity.dp(24), 0)
-        emptyState.addView(activity.displayTitle("Nothing here yet", 28f))
+        emptyState.addView(activity.displayTitle("Nothing yet", 30f))
         emptyState.addView(activity.label(
-            "Start a video on the page, then tap Look again. Some sites only reveal their videos after you press play.",
+            "Press play on the video, then tap Look again. Some sites only show their videos after playback starts.",
             15f, Palette.INK_SOFT
         ).apply { setPadding(0, activity.dp(10), 0, activity.dp(18)) })
-        emptyState.addView(activity.iconChip(R.drawable.ic_refresh, "Look again") {
-            startScan()
-        }.apply {
-            layoutParams = LinearLayout.LayoutParams(activity.dp(56), activity.dp(56))
-        }, LinearLayout.LayoutParams(activity.dp(56), activity.dp(56)))
+        emptyState.addView(activity.iconChip(R.drawable.ic_refresh, "Look again") { startScan() },
+            LinearLayout.LayoutParams(activity.dp(52), activity.dp(52)))
         content.addView(emptyState, FrameLayout.LayoutParams(-1, -2))
         column.addView(content, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = activity.dp(4) })
 
-        // The footer floats over the list so "Download all" is always in reach.
         footer.apply {
             gravity = Gravity.CENTER
             textSize = 16f
             typeface = Type.display
-            letterSpacing = 0.01f
             setTextColor(Palette.WHITE)
             background = activity.roundRect(99, Palette.ACCENT)
             springPress(0.96f)
             setOnClickListener { downloadAllPending() }
         }
         addView(column, FrameLayout.LayoutParams(-1, -1))
-        addView(footer, FrameLayout.LayoutParams(-1, activity.dp(58), android.view.Gravity.BOTTOM).apply {
+        addView(footer, FrameLayout.LayoutParams(-1, activity.dp(58), Gravity.BOTTOM).apply {
             marginStart = activity.dp(22); marginEnd = activity.dp(22); bottomMargin = activity.dp(22)
         })
 
-        activity.onJobChanged = { url -> rowChanged(url) }
+        activity.addJobListener(jobListener)
         startScan()
         refreshUi(animate = true)
     }
@@ -191,8 +256,7 @@ class MediaSheet(private val activity: PhoneActivity, private val pageUrl: Strin
     private fun updateFooter() {
         val pending = pendingItems()
         val running = visible.count { activity.jobFor(it.url)?.state == PhoneActivity.Job.State.RUNNING }
-        val visibleNow = visible.isNotEmpty()
-        footer.visibility = if (visibleNow) View.VISIBLE else View.GONE
+        footer.visibility = if (visible.isNotEmpty()) View.VISIBLE else View.GONE
         when {
             pending.isEmpty() && running > 0 -> {
                 footer.text = "Downloading $running…"
@@ -215,22 +279,22 @@ class MediaSheet(private val activity: PhoneActivity, private val pageUrl: Strin
         updateFooter()
     }
 
-    /* ---------------- rows ---------------- */
+    /* ---------------- cards ---------------- */
 
     private inner class Adapter : RecyclerView.Adapter<Holder>() {
         override fun getItemCount(): Int = visible.size
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
-            val row = MediaRowView(activity)
-            row.layoutParams = RecyclerView.LayoutParams(
+            val card = MediaCardView(activity)
+            card.layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = activity.dp(12) }
-            return Holder(row)
+            ).apply { bottomMargin = activity.dp(14) }
+            return Holder(card)
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
             val item = visible[position]
-            holder.row.bindFull(item, activity.jobFor(item.url), actionsFor(item))
+            holder.card.bindFull(item, activity.jobFor(item.url), actionsFor(item))
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int, payloads: MutableList<Any>) {
@@ -238,7 +302,7 @@ class MediaSheet(private val activity: PhoneActivity, private val pageUrl: Strin
                 onBindViewHolder(holder, position)
             } else {
                 val item = visible[position]
-                holder.row.bindState(item, activity.jobFor(item.url), actionsFor(item))
+                holder.card.bindState(item, activity.jobFor(item.url), actionsFor(item))
             }
         }
     }
@@ -249,35 +313,35 @@ class MediaSheet(private val activity: PhoneActivity, private val pageUrl: Strin
         open = { job -> job.localUri?.let { activity.openDownloadedFile(it, job.mime) } }
     )
 
-    private class Holder(val row: MediaRowView) : RecyclerView.ViewHolder(row)
+    private class Holder(val card: MediaCardView) : RecyclerView.ViewHolder(card)
 
     companion object {
         private const val PAYLOAD_STATE = "state"
     }
 }
 
-/** Callbacks a row can fire. Kept as a value so rebinding never allocates a listener chain. */
-class RowActions(
-    val download: () -> Unit,
-    val cancel: () -> Unit,
-    val open: (PhoneActivity.Job) -> Unit
-)
+/**
+ * One detected file as a card. Layout top to bottom: thumbnail with quality and
+ * kind badges, title, facts, and one action row whose content depends on state.
+ */
+class MediaCardView(context: Context) : LinearLayout(context) {
 
-/** One media file: thumbnail, name, facts, and the control for its current state. */
-class MediaRowView(context: Context) : FrameLayout(context) {
-
-    private val thumb = FrameLayout(context).apply {
-        background = context.roundRect(18, Palette.PAPER_DEEP)
-        clipToOutline = true
-    }
+    private val thumbBox = FrameLayout(context).apply { setBackgroundColor(0xFF17171A.toInt()) }
     private val image = ImageView(context).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
-    private val play = PlayGlyph(context)
+    private val glyphDisc = FrameLayout(context).apply {
+        background = context.roundRect(99, Palette.PAPER)
+    }
+    private val glyph = PlayGlyph(context).apply { tint = Palette.INK }
+    private val qualityBadge = badge(context)
+    private val kindBadge = badge(context)
+
     private val title = TextView(context).apply {
-        textSize = 15f
+        textSize = 16f
         typeface = Type.title
         setTextColor(Palette.INK)
-        isSingleLine = true
+        maxLines = 2
         ellipsize = TextUtils.TruncateAt.MIDDLE
+        includeFontPadding = false
     }
     private val meta = TextView(context).apply {
         textSize = 13f
@@ -287,179 +351,142 @@ class MediaRowView(context: Context) : FrameLayout(context) {
         ellipsize = TextUtils.TruncateAt.END
         setPadding(0, context.dp(4), 0, 0)
     }
-    private val quality = TextView(context).apply {
-        textSize = 11f
-        typeface = Type.display
-        setTextColor(Palette.INK)
-        gravity = Gravity.CENTER
-        background = context.roundRect(8, Palette.PAPER_DEEP)
-        setPadding(context.dp(7), 0, context.dp(7), 0)
-        visibility = View.GONE
-    }
-    private val action = FrameLayout(context).apply { springPress(0.86f) }
-    private val disc = ImageView(context).apply {
-        background = context.roundRect(99, Palette.ACCENT)
-        icon(R.drawable.ic_download, Palette.WHITE)
-        scaleType = ImageView.ScaleType.CENTER
-        contentDescription = "Download"
-    }
-    private val ring = RingView(context)
-    private val percent = TextView(context).apply {
-        textSize = 10f
-        typeface = Type.display
-        setTextColor(Palette.INK)
-        gravity = Gravity.CENTER
-    }
-    private val done = CheckMarkView(context)
-    private val retry = ImageView(context).apply {
-        background = context.roundRect(99, Palette.PAPER_DEEP)
-        icon(R.drawable.ic_refresh, Palette.ACCENT)
-        scaleType = ImageView.ScaleType.CENTER
-        contentDescription = "Retry"
-    }
 
-    private var actions: RowActions? = null
-    private var currentJob: PhoneActivity.Job? = null
-    private var currentItem: MediaScanner.Item? = null
+    private val actions = FrameLayout(context)
+    private val idleButton = pill(context, "Download", Palette.ACCENT, Palette.WHITE)
+    private val doneButton = pill(context, "Play", Palette.INK, Palette.WHITE)
+    private val retryButton = pill(context, "Try again", Palette.ACCENT, Palette.WHITE)
+    private val runningRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    private val bar = BarView(context)
+    private val cancelChip = context.iconChip(R.drawable.ic_x, "Cancel", Palette.INK_SOFT) {}
+
+    private var actionsRef: RowActions? = null
 
     init {
-        background = context.roundRect(24, Palette.CARD, Palette.LINE)
+        orientation = LinearLayout.VERTICAL
+        background = context.roundRect(26, Palette.CARD, Palette.LINE)
         clipToOutline = true
 
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(context.dp(12), context.dp(12), context.dp(14), context.dp(12))
-        }
-        thumb.addView(image, FrameLayout.LayoutParams(-1, -1))
-        thumb.addView(play, FrameLayout.LayoutParams(context.dp(30), context.dp(30), Gravity.CENTER))
-        row.addView(thumb, LinearLayout.LayoutParams(context.dp(72), context.dp(72)))
+        thumbBox.addView(image, FrameLayout.LayoutParams(-1, -1))
+        glyphDisc.addView(glyph, FrameLayout.LayoutParams(context.dp(20), context.dp(20), Gravity.CENTER))
+        thumbBox.addView(glyphDisc, FrameLayout.LayoutParams(context.dp(58), context.dp(58), Gravity.CENTER))
+        thumbBox.addView(qualityBadge, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, context.dp(26), Gravity.TOP or Gravity.START
+        ).apply { leftMargin = context.dp(12); topMargin = context.dp(12) })
+        thumbBox.addView(kindBadge, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, context.dp(26), Gravity.TOP or Gravity.END
+        ).apply { rightMargin = context.dp(12); topMargin = context.dp(12) })
+        addView(thumbBox, LinearLayout.LayoutParams(-1, context.dp(172)))
 
-        val text = LinearLayout(context).apply {
+        val body = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(context.dp(14), 0, context.dp(8), 0)
+            setPadding(context.dp(16), context.dp(14), context.dp(16), context.dp(16))
         }
-        val titleRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        titleRow.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        titleRow.addView(quality, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, context.dp(22)).apply { leftMargin = context.dp(6) })
-        text.addView(titleRow, LinearLayout.LayoutParams(-1, -2))
-        text.addView(meta, LinearLayout.LayoutParams(-1, -2))
-        row.addView(text, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        body.addView(title, LinearLayout.LayoutParams(-1, -2))
+        body.addView(meta, LinearLayout.LayoutParams(-1, -2))
 
-        action.addView(disc, FrameLayout.LayoutParams(context.dp(46), context.dp(46), Gravity.CENTER))
-        action.addView(ring, FrameLayout.LayoutParams(context.dp(46), context.dp(46), Gravity.CENTER))
-        action.addView(percent, FrameLayout.LayoutParams(context.dp(46), context.dp(46), Gravity.CENTER))
-        action.addView(done, FrameLayout.LayoutParams(context.dp(46), context.dp(46), Gravity.CENTER))
-        action.addView(retry, FrameLayout.LayoutParams(context.dp(46), context.dp(46), Gravity.CENTER))
-        row.addView(action, LinearLayout.LayoutParams(context.dp(46), context.dp(46)))
+        runningRow.addView(bar, LinearLayout.LayoutParams(0, context.dp(8), 1f).apply { rightMargin = context.dp(12) })
+        runningRow.addView(cancelChip, LinearLayout.LayoutParams(context.dp(40), context.dp(40)))
 
-        addView(row, FrameLayout.LayoutParams(-1, -2))
+        actions.addView(idleButton, FrameLayout.LayoutParams(-1, context.dp(50), Gravity.CENTER))
+        actions.addView(doneButton, FrameLayout.LayoutParams(-1, context.dp(50), Gravity.CENTER))
+        actions.addView(retryButton, FrameLayout.LayoutParams(-1, context.dp(50), Gravity.CENTER))
+        actions.addView(runningRow, FrameLayout.LayoutParams(-1, context.dp(50), Gravity.CENTER))
+        body.addView(actions, LinearLayout.LayoutParams(-1, context.dp(50)).apply { topMargin = context.dp(14) })
+
+        addView(body, LinearLayout.LayoutParams(-1, -2))
     }
 
-    /** Full bind: thumbnail and facts, then the state. Used when a row first appears. */
     fun bindFull(item: MediaScanner.Item, job: PhoneActivity.Job?, actions: RowActions) {
-        currentItem = item
         val isVideo = item.kind == MediaScanner.Kind.VIDEO
-        play.visibility = if (isVideo) View.VISIBLE else View.GONE
+        glyphDisc.visibility = if (isVideo) View.VISIBLE else View.GONE
         image.visibility = if (isVideo) View.GONE else View.VISIBLE
         if (!isVideo) {
             val bytes = item.thumbnail
             val bitmap: Bitmap? = bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-            if (bitmap != null) image.setImageBitmap(bitmap) else image.setImageResource(0)
+            if (bitmap != null) image.setImageBitmap(bitmap) else image.setImageDrawable(null)
         }
         title.text = item.fileName
-        quality.text = item.quality
-        quality.visibility = if (isVideo && item.quality.isNotBlank()) View.VISIBLE else View.GONE
+        setBadge(qualityBadge, if (isVideo) item.quality else "")
+        setBadge(kindBadge, if (isVideo) "VIDEO" else "IMAGE")
         bindState(item, job, actions)
     }
 
-    /** Light bind: just the state. Used for progress ticks, so thumbnails are not decoded again. */
     fun bindState(item: MediaScanner.Item, job: PhoneActivity.Job?, actions: RowActions) {
-        this.actions = actions
-        currentItem = item
-        currentJob = job
-        val size = if (item.bytes > 0) Fmt.bytes(item.bytes) else ""
+        actionsRef = actions
+        val isVideo = item.kind == MediaScanner.Kind.VIDEO
         val ext = item.mimeType.substringAfter('/').substringBefore(';').uppercase()
-            .let { if (it.isBlank() || it == "OCTET-STREAM") "FILE" else it }
-        val facts = if (item.kind == MediaScanner.Kind.VIDEO) {
-            listOf(ext, size)
-        } else {
-            listOf(if (item.width > 0) "${item.width}×${item.height}" else "", size)
-        }.filter { it.isNotBlank() }.joinToString("  ·  ")
+            .let { if (it.isBlank() || it == "OCTET-STREAM") (if (isVideo) "VIDEO" else "IMAGE") else it }
+        val size = if (item.bytes > 0) Fmt.bytes(item.bytes) else ""
+        val dims = if (!isVideo && item.width > 0) "${item.width}×${item.height}" else ""
+        val facts = listOf(ext, dims, size).filter { it.isNotBlank() }.joinToString("  ·  ")
 
-        disc.visibility = View.GONE
-        ring.visibility = View.GONE
-        percent.visibility = View.GONE
-        done.visibility = View.GONE
-        retry.visibility = View.GONE
-        action.setOnClickListener(null)
-        action.isClickable = false
-        setOnClickListener(null)
         meta.setTextColor(Palette.INK_SOFT)
+        idleButton.visibility = View.GONE
+        doneButton.visibility = View.GONE
+        retryButton.visibility = View.GONE
+        runningRow.visibility = View.GONE
 
         when {
             job == null -> {
-                disc.visibility = View.VISIBLE
-                meta.text = facts.ifBlank { ext }
-                action.isClickable = true
-                action.setOnClickListener { actions.download() }
-                action.contentDescription = "Download"
+                meta.text = facts
+                idleButton.visibility = View.VISIBLE
+                idleButton.setOnClickListener { actions.download() }
+                setOnClickListener(null)
             }
             job.state == PhoneActivity.Job.State.RUNNING -> {
-                ring.visibility = View.VISIBLE
-                percent.visibility = View.VISIBLE
                 val pct = (job.fraction * 100).toInt()
-                percent.text = if (job.expected > 0) "$pct%" else "…"
-                ring.setProgress(job.fraction)
                 val speed = if (job.bytesPerSecond > 0) "  ·  ${Fmt.bytes(job.bytesPerSecond)}/s" else ""
-                meta.text = if (job.expected > 0) {
-                    "${Fmt.bytes(job.received)} of ${Fmt.bytes(job.expected)}$speed"
-                } else {
-                    "${Fmt.bytes(job.received)} received$speed"
-                }
-                action.isClickable = true
-                action.setOnClickListener { actions.cancel() }
-                action.contentDescription = "Cancel"
+                meta.text = if (job.expected > 0) "$pct%  ·  ${Fmt.bytes(job.received)} of ${Fmt.bytes(job.expected)}$speed"
+                else "${Fmt.bytes(job.received)} received$speed"
+                runningRow.visibility = View.VISIBLE
+                bar.setFraction(job.fraction)
+                cancelChip.setOnClickListener { actions.cancel() }
+                setOnClickListener(null)
             }
             job.state == PhoneActivity.Job.State.DONE -> {
-                done.visibility = View.VISIBLE
-                done.animateIn()
-                meta.text = "Saved  ·  " + facts
-                isClickable = true
+                meta.text = "Saved  ·  $facts"
+                doneButton.visibility = View.VISIBLE
+                doneButton.setOnClickListener { actions.open(job) }
                 setOnClickListener { actions.open(job) }
-                action.isClickable = true
-                action.setOnClickListener { actions.open(job) }
-                action.contentDescription = "Open"
             }
             else -> {
-                retry.visibility = View.VISIBLE
-                val reason = job.reason.ifBlank { "Failed" }
-                meta.text = reason
+                meta.text = job.reason.ifBlank { "Download failed" }
                 meta.setTextColor(Palette.DANGER)
-                action.isClickable = true
-                action.setOnClickListener { actions.download() }
-                action.contentDescription = "Retry"
+                retryButton.visibility = View.VISIBLE
+                retryButton.setOnClickListener { actions.download() }
+                setOnClickListener(null)
             }
         }
     }
-}
 
-/** A small, custom play triangle inside a paper disc. Drawn, not an icon font, so it stays crisp. */
-class PlayGlyph(context: Context) : View(context) {
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Palette.INK
-        style = Paint.Style.FILL
+    private fun pill(context: Context, text: String, fill: Int, ink: Int): TextView = TextView(context).apply {
+        this.text = text
+        gravity = Gravity.CENTER
+        textSize = 15f
+        typeface = Type.display
+        letterSpacing = 0.01f
+        setTextColor(ink)
+        background = context.roundRect(99, fill)
+        springPress(0.97f)
     }
-    private val path = Path()
 
-    override fun onDraw(canvas: Canvas) {
-        val w = width.toFloat()
-        val h = height.toFloat()
-        path.reset()
-        path.moveTo(w * 0.36f, h * 0.26f)
-        path.lineTo(w * 0.76f, h * 0.5f)
-        path.lineTo(w * 0.36f, h * 0.74f)
-        path.close()
-        canvas.drawPath(path, fill)
+    private fun badge(context: Context): TextView = TextView(context).apply {
+        textSize = 11f
+        typeface = Type.display
+        letterSpacing = 0.06f
+        setTextColor(Palette.WHITE)
+        gravity = Gravity.CENTER
+        setPadding(context.dp(9), 0, context.dp(9), 0)
+        background = context.roundRect(8, 0xB3000000.toInt())
+        visibility = View.GONE
+    }
+
+    private fun setBadge(view: TextView, text: String) {
+        view.text = text
+        view.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
     }
 }
