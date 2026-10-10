@@ -26,7 +26,7 @@ object Prefs {
     private const val K_FIRST_RUN = "first_run"
     private const val K_HIDE_STATUS_BAR = "hide_status_bar"
     private const val K_SHOW_MOBILE_KEYBOARD = "show_mobile_keyboard"
-    private const val K_AUTO_ROTATE = "auto_rotate"
+    private const val K_TABLET_MODE = "tablet_mode"
     private const val K_SHOW_DOWNLOAD_BUTTON = "show_download_button"
     private const val K_MEDIA_MIN_IMAGE_PX = "media_min_image_px"
     private const val K_MEDIA_MIN_VIDEO_MB = "media_min_video_mb"
@@ -75,12 +75,13 @@ object Prefs {
         set(v) = sp.edit().putBoolean(K_SHOW_MOBILE_KEYBOARD, v).apply()
 
     /**
-     * true  = the screen follows the device sensor in both portrait and landscape.
-     * false = the screen stays locked to landscape (the original behaviour).
+     * false (default) = phone layout, portrait, separate PhoneActivity.
+     * true = tablet layout, landscape, the original rail UI in MainActivity.
+     * Orientation is fixed per mode; there is no auto-rotate.
      */
-    var autoRotate: Boolean
-        get() = sp.getBoolean(K_AUTO_ROTATE, true)
-        set(v) = sp.edit().putBoolean(K_AUTO_ROTATE, v).apply()
+    var tabletMode: Boolean
+        get() = sp.getBoolean(K_TABLET_MODE, false)
+        set(v) = sp.edit().putBoolean(K_TABLET_MODE, v).apply()
 
     /* ---- Media downloader ---- */
     /** Shows the media (images/videos) download button in the Web toolbar. */

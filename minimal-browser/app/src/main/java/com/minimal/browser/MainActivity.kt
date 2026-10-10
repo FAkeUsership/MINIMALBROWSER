@@ -106,6 +106,9 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     private enum class Screen { HOME, WEB, TABS, SETTINGS, LIST }
 
+    /** True when onCreate forwarded to PhoneActivity; lifecycle hooks must then do nothing. */
+    private var redirecting = false
+
     /* ---------------- activity results ---------------- */
     private val exportLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -122,6 +125,18 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Prefs.init(this)
+        // Phone is the default. This activity is the tablet layout only, so a
+        // phone user is forwarded to PhoneActivity with the original intent.
+        if (!Prefs.tabletMode) {
+            redirecting = true
+            startActivity(Intent(this, com.minimal.browser.phone.PhoneActivity::class.java).apply {
+                action = intent.action
+                data = intent.data
+                intent.extras?.let { putExtras(it) }
+            })
+            finish()
+            return
+        }
         // The bundled runtime and GeckoView are both created lazily at the Web
         // boundary. Home, Tabs, and Settings never start native browser code.
         TabManager.host = this
@@ -1017,6 +1032,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (redirecting) return
         setIntent(intent)
         val uri = intent.dataString
         if (!uri.isNullOrEmpty()) openUrl(uri)
@@ -1059,6 +1075,13 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     override fun onEnterVideoFullScreen(fullScreen: Boolean) {
+        // Video may be better in portrait, so let the sensor choose while it is
+        // full screen. Leaving full screen restores the landscape lock.
+        requestedOrientation = if (fullScreen) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         // A hidden/inactive tab must not hide the ordinary Home/Tabs UI because
         // of a delayed content callback after its surface was released.
         if (current != Screen.WEB) {
@@ -1131,14 +1154,13 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
      * off, the screen stays locked to landscape, as it was in earlier versions.
      */
     fun applyOrientation() {
-        requestedOrientation = if (Prefs.autoRotate) {
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
-        } else {
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        }
+        // Tablet mode is landscape only. Auto-rotate was removed.
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
     }
 
-    override fun onOrientationChanged() = applyOrientation()
+    override fun onLayoutModeChanged(tablet: Boolean) {
+        if (!tablet) com.minimal.browser.phone.LayoutMode.switchTo(this, tablet = false)
+    }
 
     /**
      * Opens the media downloader for the current web page. Each ticked file is
@@ -1548,6 +1570,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
     override fun onResume() {
         super.onResume()
+        if (redirecting) return
         registerInputDeviceListener()
         if (current == Screen.WEB && ensureBrowserReady()) {
             attachActiveTabToVisibleView(TabManager.active)
@@ -1559,6 +1582,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     override fun onPause() {
+        if (redirecting) return super.onPause()
         unregisterInputDeviceListener()
         TabManager.persist()
         TabManager.pauseActive()
@@ -1568,10 +1592,13 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
     }
 
     override fun onDestroy() {
+        if (redirecting) return super.onDestroy()
         unregisterInputDeviceListener()
         TabManager.detach()
         webScreen.detachGeckoView()
-        TabManager.host = null
+        // Only clear the host if it is still us: during a Phone/Tablet switch the
+        // new activity may already have claimed it.
+        if (TabManager.host === this) TabManager.host = null
         chromeStore.shutdownNow()
         super.onDestroy()
     }

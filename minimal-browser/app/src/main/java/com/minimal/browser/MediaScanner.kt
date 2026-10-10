@@ -95,7 +95,7 @@ object MediaScanner {
      * Blocking call: run it on a background thread. Never call it on the UI thread.
      * Minimum sizes come from Settings. 0 means no limit.
      */
-    fun scan(pageUrl: String, minImagePx: Int, minVideoMb: Int): Result {
+    fun scan(pageUrl: String, minImagePx: Int, minVideoMb: Int, includeImages: Boolean = true): Result {
         val document = try {
             Jsoup.connect(pageUrl)
                 .userAgent(USER_AGENT)
@@ -120,7 +120,7 @@ object MediaScanner {
             when {
                 STREAM_EXT.containsMatchIn(url) -> streams++
                 hint == Kind.VIDEO || VIDEO_EXT.containsMatchIn(url) -> videoUrls.putIfAbsent(url, quality)
-                hint == Kind.IMAGE || IMAGE_EXT.containsMatchIn(url) -> imageUrls.add(url)
+                hint == Kind.IMAGE || IMAGE_EXT.containsMatchIn(url) -> if (includeImages) imageUrls.add(url)
             }
         }
 

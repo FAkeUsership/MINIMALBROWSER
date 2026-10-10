@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.0 — Phone-first layout and a real downloader
+
+- **Phone is the default.** A new portrait layout with a floating address capsule, a floating dock (back, forward, download, tabs, menu), and a start page with quick access, a resume card for your last session, and recent history.
+- **Tablet mode.** The original landscape rail layout is kept. Switch with *Settings → Layout* or *Menu → Switch to tablet mode*. Switching back to phone is the same control.
+- **Downloader like a video app.** Each page is checked quietly for videos. A red dock button shows the count and pulses while there is something to save. The sheet lists videos and images with type, quality, and size. Each file has its own download control with a progress ring, live speed, cancel, and an Open action when finished. *Download all* starts every pending file.
+- **Keyboard fix.** On some phones the on-screen keyboard stayed hidden because the device reported a hardware keyboard. Only a real, external alphabetic keyboard now suppresses the on-screen keyboard.
+- **Orientation.** Auto-rotate is removed. Phone is locked to portrait, tablet to landscape. Video full screen lets the sensor choose, then restores the lock.
+- **Known limits.** HLS and DASH streams are counted but not downloaded yet. JavaScript-rendered or login-protected media may fail. Downloads stop if the app is closed.
+
 ## v1.3.0 — Auto-rotate and a live download experience
 
 - **Auto-rotate.** The screen follows the device in portrait and landscape. Settings → Appearance → *Auto-rotate* turns this off to lock landscape.

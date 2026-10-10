@@ -588,18 +588,17 @@ class WebScreen(context: Context) : LinearLayout(context) {
  * after focusing the omnibox, which made a docked/BT keyboard feel broken.
  */
 object UiKeys {
-    fun hasHardwareKeyboard(context: Context): Boolean {
-        val configured = context.resources.configuration.keyboard
-        if (configured == Configuration.KEYBOARD_QWERTY || configured == Configuration.KEYBOARD_12KEY) {
-            return true
-        }
-        return InputDevice.getDeviceIds().any { id ->
+    /**
+     * Only a real, attached keyboard counts. Configuration.keyboard is not used:
+     * several phones report QWERTY there even with no keyboard connected, which
+     * suppressed the on-screen keyboard in every text field.
+     */
+    fun hasHardwareKeyboard(context: Context): Boolean =
+        InputDevice.getDeviceIds().any { id ->
             val device = InputDevice.getDevice(id) ?: return@any false
-            !device.isVirtual &&
-                device.keyboardType != InputDevice.KEYBOARD_TYPE_NONE &&
-                (device.sources and InputDevice.SOURCE_KEYBOARD) == InputDevice.SOURCE_KEYBOARD
+            device.isExternal && !device.isVirtual &&
+                device.keyboardType == InputDevice.KEYBOARD_TYPE_ALPHABETIC
         }
-    }
 
     /**
      * A physical keyboard always suppresses the mobile IME. Without one, the

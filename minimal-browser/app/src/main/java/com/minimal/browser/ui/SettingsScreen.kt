@@ -42,8 +42,8 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
         fun onShowAbout()
         fun onStatusBarVisibilityChanged()
         fun onMobileKeyboardVisibilityChanged()
-        /** Called after the auto-rotate switch changes; the host applies the new lock. */
-        fun onOrientationChanged() {}
+        /** Called when the Tablet mode switch changes. true = tablet, false = phone. */
+        fun onLayoutModeChanged(tablet: Boolean) {}
         fun toast(message: String)
     }
 
@@ -186,16 +186,14 @@ class SettingsScreen(context: Context) : LinearLayout(context) {
 
     private fun appearancePanel(): List<View> {
         val out = ArrayList<View>()
-        out += group("Screen rotation")
+        out += group("Layout")
         out += switchRow(
             R.drawable.ic_fullscreen,
-            "Auto-rotate",
-            "Follow the device in both portrait and landscape. Turn this off to keep the browser locked to landscape.",
-            Prefs.autoRotate
+            "Tablet mode",
+            "Off = phone layout (portrait, the default). On = tablet layout (landscape, rail on the side). The screen no longer rotates automatically.",
+            Prefs.tabletMode
         ) { on ->
-            Prefs.autoRotate = on
-            callback?.onOrientationChanged()
-            callback?.toast(if (on) "Auto-rotate on" else "Locked to landscape")
+            callback?.onLayoutModeChanged(on)
         }
 
         out += group("Full screen")
