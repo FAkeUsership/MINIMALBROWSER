@@ -35,6 +35,11 @@ object Downloads {
     private const val PROGRESS_INTERVAL_MS = 400L
     private const val BUFFER_SIZE = 64 * 1024
 
+    /** Failure reason delivered to listeners when the person cancels a transfer. */
+    const val CANCELLED_REASON = "Cancelled"
+
+    private class CancelledException : IOException(CANCELLED_REASON)
+
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val executor = Executors.newFixedThreadPool(2) { work ->
         Thread(work, "minimal-browser-download").apply {
@@ -81,6 +86,19 @@ object Downloads {
     private class Transfer(val request: Request) {
         val startedAt = System.currentTimeMillis()
         @Volatile var receivedBytes: Long = 0
+        @Volatile var cancelled: Boolean = false
+    }
+
+    /**
+     * Stops a queued or running transfer. The copy loop checks the flag on every
+     * buffer, so cancellation takes effect within a fraction of a second, and the
+     * partly written file is removed.
+     * @return false when no transfer with [id] is active.
+     */
+    fun cancel(id: String): Boolean {
+        val transfer = transfers[id] ?: return false
+        transfer.cancelled = true
+        return true
     }
 
     private data class Target(
@@ -213,6 +231,7 @@ object Downloads {
 
         executor.execute {
             try {
+                if (transfer.cancelled) throw CancelledException()
                 val body = openBody()
                 val copied = copyResponse(body, target.output, transfer, listener)
                 publishTarget(appContext, target)
@@ -230,9 +249,14 @@ object Downloads {
                 // leaks its descriptor and can leave an empty file behind.
                 runCatching { target.output.close() }
                 discardTarget(appContext, target)
-                Log.w(TAG, "download failed for ${request.sourceUrl}", error)
-                val detail = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
-                dispatch { listener.onFailed(request, "Download failed: $detail") }
+                if (error is CancelledException) {
+                    Log.i(TAG, "cancelled ${request.fileName}")
+                    dispatch { listener.onFailed(request, CANCELLED_REASON) }
+                } else {
+                    Log.w(TAG, "download failed for ${request.sourceUrl}", error)
+                    val detail = error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName
+                    dispatch { listener.onFailed(request, "Download failed: $detail") }
+                }
             }
         }
         return true
@@ -250,6 +274,7 @@ object Downloads {
             output.use { destination ->
                 val buffer = ByteArray(BUFFER_SIZE)
                 while (true) {
+                    if (transfer.cancelled) throw CancelledException()
                     val count = input.read(buffer)
                     if (count < 0) break
                     destination.write(buffer, 0, count)

@@ -1154,7 +1154,31 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         if (isFinishing || isDestroyed) return
         val privateTab = tab?.private == true
         try {
-            MediaDownloadDialog(this, pageUrl) { items ->
+            MediaDownloadDialog(this, pageUrl) { items, sheet ->
+                // One listener feeds both the Downloads list/history (the normal
+                // path) and the sheet's live progress, so the two always agree.
+                val recorder = downloadListener(privateTab, quiet = true)
+                val combined = object : Downloads.Listener {
+                    override fun onStarted(request: Downloads.Request) {
+                        recorder.onStarted(request)
+                        sheet.onStarted(request)
+                    }
+
+                    override fun onProgress(request: Downloads.Request, receivedBytes: Long, expectedBytes: Long) {
+                        recorder.onProgress(request, receivedBytes, expectedBytes)
+                        sheet.onProgress(request, receivedBytes, expectedBytes)
+                    }
+
+                    override fun onCompleted(download: Downloads.CompletedDownload) {
+                        recorder.onCompleted(download)
+                        sheet.onCompleted(download)
+                    }
+
+                    override fun onFailed(request: Downloads.Request, reason: String) {
+                        recorder.onFailed(request, reason)
+                        sheet.onFailed(request, reason)
+                    }
+                }
                 var started = 0
                 items.forEach { item ->
                     val ok = Downloads.startUrl(
@@ -1164,11 +1188,11 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                         item.mimeType,
                         pageUrl,
                         MediaScanner.USER_AGENT,
-                        downloadListener(privateTab)
+                        combined
                     )
                     if (ok) started++
                 }
-                toast.say("Downloading $started of ${items.size} file(s)")
+                if (started == 0) toast.say("Could not start these downloads")
             }.show()
         } catch (error: Throwable) {
             Log.w("MinimalBrowser", "could not open the media downloader", error)
@@ -1176,9 +1200,17 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
         }
     }
 
-    private fun downloadListener(privateDownload: Boolean): Downloads.Listener = object : Downloads.Listener {
+    /**
+     * Records and reports one download. [quiet] suppresses toasts, used when the
+     * media sheet already shows live progress for a batch.
+     */
+    private fun downloadListener(privateDownload: Boolean, quiet: Boolean = false): Downloads.Listener = object : Downloads.Listener {
+        private fun announce(message: String) {
+            if (!quiet) toast.say(message)
+        }
+
         override fun onStarted(request: Downloads.Request) {
-            toast.say("Downloading ${request.fileName}")
+            announce("Downloading ${request.fileName}")
             refreshDownloadsIfVisible(force = true)
         }
 
@@ -1191,7 +1223,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
 
         override fun onCompleted(download: Downloads.CompletedDownload) {
             if (privateDownload) {
-                toast.say("Downloaded ${download.request.fileName}")
+                announce("Downloaded ${download.request.fileName}")
                 refreshDownloadsIfVisible(force = true)
                 return
             }
@@ -1211,7 +1243,7 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                     }.isSuccess
                     runOnUiThread {
                         if (!isDestroyed) {
-                            toast.say(
+                            announce(
                                 if (saved) "Downloaded ${download.request.fileName}"
                                 else "File saved, but it could not be added to Downloads"
                             )
@@ -1221,12 +1253,12 @@ class MainActivity : AppCompatActivity(), TabManager.Host,
                 }
             } catch (error: Throwable) {
                 Log.w("MinimalBrowser", "could not record completed download", error)
-                if (!isDestroyed) toast.say("Downloaded ${download.request.fileName}")
+                if (!isDestroyed) announce("Downloaded ${download.request.fileName}")
             }
         }
 
         override fun onFailed(request: Downloads.Request, reason: String) {
-            toast.say(reason)
+            announce(reason)
             refreshDownloadsIfVisible(force = true)
         }
     }

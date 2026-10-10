@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.3.0 — Auto-rotate and a live download experience
+
+- **Auto-rotate.** The screen follows the device in portrait and landscape. Settings → Appearance → *Auto-rotate* turns this off to lock landscape.
+- **Media downloader, redesigned.** The Web toolbar download button opens a sheet with three phases:
+  - **Scan:** a radar sweep runs while the page is read, then results arrive in a staggered entrance.
+  - **Pick:** filter by Images or Videos, select all or some, and see each file's size and resolution.
+  - **Download:** every file gets its own progress bar, live speed, and a cancel button. A finished file ticks itself off with an animated check, and a failed file shakes so it stands out. An overall bar tracks the batch.
+- **Real cancel.** Cancelling stops the transfer within a fraction of a second and removes the partly written file. "Cancel all" stops everything still queued or running.
+- **Run in background.** Closing the sheet during a batch keeps the downloads going. They stay in the Downloads list.
+- **Motion.** Sheet spring-open, row stagger, press feedback on taps, animated checkmarks, and a shake on failure. Every animation is short and can be interrupted by the next tap.
+- **Fix:** the downloader no longer shows a toast for every file in a batch. The sheet shows the progress instead.
+- **Fix:** plain `Content-Disposition` filenames keep `+` characters (no percent-decoding).
+- **Fix:** Backup export includes all history (it was capped at 500 entries).
+- **Fix:** a failed or cancelled download closes its destination before deleting it.
+
 ## v1.2.9 — Auto-rotate, media downloader, and fixes
 
 - **Auto-rotate.** Settings → Appearance → *Auto-rotate* lets the browser follow the device in portrait and landscape. Turn it off to lock landscape again. The manifest and `MainActivity.applyOrientation()` now both use the same choice.
